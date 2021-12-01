@@ -41,22 +41,59 @@ namespace ros {
   class NodeHandle;
 }  // namespace ros
 
+const float kEpsilon = 1e-5;
+static bool fEquals (float a, float b) {
+  return (a >= b - kEpsilon && a <= b + kEpsilon);
+}
+
+
 namespace navigation {
 
-struct PathOption {
-  float curvature;
-  float theta;
-  float clearance;
-  float radius;
-  Eigen::Vector2f CoT;
-  float angle_travelled;
-  float free_path_length;
-  float distance_to_goal;
-  Eigen::Vector2f obstruction;
-  Eigen::Vector2f closest_point;
-  float score;
-  EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
-};
+
+
+  struct PathOption {
+    float curvature;
+    float theta;
+    float clearance;
+    float radius;
+    Eigen::Vector2f CoT;
+    float angle_travelled;
+    float free_path_length;
+    float distance_to_goal;
+    Eigen::Vector2f obstruction;
+    Eigen::Vector2f closest_point;
+    float score;
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
+  };
+
+  struct CurveOption {
+    float curvature;
+    float distance;
+  };
+
+  struct State {
+    float x;
+    float y;
+    float theta;
+
+    bool operator== (const State& other) const {
+      return fEquals(x, other.x) && fEquals(y, other.y) && fEquals(theta, other.theta);
+    }
+
+    bool operator< (const State& other) const {
+      if (!fEquals(x, other.x))
+        return x < other.x;
+
+      if (!fEquals(y, other.y))
+        return y < other.y;
+      
+      if (!fEquals(theta, other.theta))
+        return theta < other.theta;
+
+      return false;
+    }
+  };
+
 
 
 class Navigation {
@@ -89,6 +126,15 @@ class Navigation {
 
   Eigen::Vector2f PixelUnHash(int hash);
 
+  float GetCurveRotation(float distance, float curvature);
+  Eigen::Vector2f GetCurveTranslation(float distance, float curvature);
+
+  struct State AddCurveToState(const struct State& cur_state, const struct CurveOption& option);
+
+  bool CheckCurveForCollision (const struct State& cur_state, const struct State& end_state, const struct CurveOption& option);
+
+
+
 
 
   static constexpr int map_x_max = 45;
@@ -100,6 +146,27 @@ class Navigation {
   static constexpr int map_y_width = (int) (map_y_max - map_y_min) / map_resolution;
 
   bool occupancy_grid [map_x_width][map_y_width];
+
+  static constexpr float state_theta_resolution = 0.1;
+  static constexpr float state_xy_resolution = 0.1;
+
+
+  std::map<struct State, float> StateMap;
+  std::vector<struct CurveOption> CurveOptions;
+
+  
+
+
+
+  // Rounds x, y, theta to a multiple of 0.1
+  struct State StateFactory(float x, float y, float theta) {
+    struct State newState;
+
+    newState.x = round(x / state_xy_resolution) * state_xy_resolution;
+    newState.y = round(y / state_xy_resolution) * state_xy_resolution;
+    newState.theta = round(theta / state_theta_resolution) * state_theta_resolution;
+    return newState;
+  }
 
   CImg<float> image_real;
 
@@ -167,6 +234,8 @@ class Navigation {
   const float INF = std::numeric_limits<float>::max();
 
   Eigen::Vector2f GOAL = Eigen::Vector2f(25, 0);
+  float GOAL_ANGLE = 0;
+
 
   Eigen::Vector2f GetTranslation(float velocity, float curvature, float time);
   float GetRotation(float velocity, float curvature, float time);
@@ -174,7 +243,9 @@ class Navigation {
   std::vector<line2f> path;
 
   void MakePlan();
+  void MakeLatticePlan();
   float heuristic(Eigen::Vector2f current, Eigen::Vector2f goal);
+  float LatticeHeuristic(const struct State& current, const struct State& goal);
   void SetGoal();
 
   float radius = 3.0;

@@ -54,12 +54,10 @@ VisualizationMsg local_viz_msg_;
 VisualizationMsg global_viz_msg_;
 AckermannCurvatureDriveMsg drive_msg_;
 // Epsilon value for handling limited numerical precision.
-const float kEpsilon = 1e-5;
+// const float kEpsilon = 1e-5;
 } //namespace
 
-bool fEquals (float a, float b) {
-  return (a >= b - kEpsilon && a <= b + kEpsilon);
-}
+
 
 bool vEquals (Eigen::Vector2f a, Eigen::Vector2f b) {
   return fEquals(a[0], b[0]) && fEquals(a[1], b[1]);
@@ -94,6 +92,16 @@ Navigation::Navigation(const string& map_file, ros::NodeHandle* n) :
   neighbors.emplace_back(-1,1);
   neighbors.emplace_back(-1,0);
   neighbors.emplace_back(-1,-1);
+
+  for (float i = -1; i <= 1; i += 0.2) {
+      CurveOption c;
+      c.curvature = i;
+
+      // Change the distance to always end up at a resolution of 0.1
+      c.distance = 0.1; 
+
+      CurveOptions.emplace_back(c);
+  }
 
   BuildGraph(map_file);
 
@@ -153,9 +161,10 @@ void Navigation::BuildGraph(const string& map_file) {
 void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
   goal_initialized_ = true;
   GOAL = loc;
+  GOAL_ANGLE = angle;
 
   if (localization_initialized_)
-    MakePlan();
+    MakeLatticePlan();
 
 }
 
@@ -301,8 +310,173 @@ void Navigation::MakePlan() {
     DrawPlan();
 } 
 
+struct State Navigation::AddCurveToState(const struct State& cur_state, const struct CurveOption& option) {
+  Vector2f translation = GetCurveTranslation(option.distance, option.curvature);
+  float rotation = GetCurveRotation(option.distance, option.curvature);
+
+  return StateFactory(cur_state.x + translation[0], cur_state.y + translation[1], cur_state.theta + rotation);
+}
+
+bool Navigation::CheckCurveForCollision (const struct State& cur_state, const struct State& end_state, const struct CurveOption& option) {
+  return false;
+}
+
+void Navigation::MakeLatticePlan() {
+
+    // int loc_x = (robot_loc_[0] - map_x_min) / map_resolution;
+    // int loc_y = (robot_loc_[1] - map_y_min) / map_resolution;
+    // Vector2f loc_pix(loc_x, loc_y);
+    // const unsigned char color2[] = { 0,255,0 };
+
+    struct State location_state = StateFactory(robot_loc_[0], robot_loc_[1], robot_angle_);
+
+    // int goal_x = (GOAL[0] - map_x_min) / map_resolution;
+    // int goal_y = (GOAL[1] - map_y_min) / map_resolution;
+    // Vector2f goal_pix(goal_x, goal_y);
+    // int goal_hash = PixelHash(goal_pix);
+
+    struct State goal_state = StateFactory(GOAL[0], GOAL[1], GOAL_ANGLE);
+
+
+    // const unsigned char color[] = { 255,0,0 };
+    // image_real.draw_point(goal_pix[0],map_y_width-goal_pix[1],color);
+    
+    // printf("Goal: %lf %lf\n", goal_pix[0], goal_pix[1]);
+    // printf("loc: %d %d\n", loc_x, loc_y);
+
+
+    SimpleQueue<struct State, float> frontier;
+    frontier.Push(location_state, 0);
+
+    std::map<struct State, float> cost;
+    cost[location_state] = 0;
+
+    std::map<struct State, struct State> parent;
+    parent[location_state] = location_state;
+
+    // printf("Begin hash: %d\n", PixelHash(loc_pix));
+    // printf("Goal Hash: %d\n", goal_hash);
+
+    printf("Starting lattice based exploration\n");
+    int it = 0;
+    while (!frontier.Empty()) {
+      if (it > 500) {
+        printf("Planning failed\n");
+        break;
+      }
+
+      // printf("\n\n**********************Iteration %d*******************************\n", it);
+      struct State current_loc = frontier.Pop();
+      // printf("Current hash: %d\n", current_hash);
+      // Eigen::Vector2f current = PixelUnHash(current_hash);
+      // printf("Current location: %lf %lf\n", current[0], current[1]);
+      if (current_loc == goal_state) {
+        printf("Found goal!\n");
+        break;
+      }
+
+      for (struct CurveOption neighbor : CurveOptions) {
+
+        struct State next_state = AddCurveToState(current_loc, neighbor);
+
+        // check for collisions
+        if (CheckCurveForCollision(current_loc, next_state, neighbor))
+          continue;
+
+        // int next_hash = PixelHash(next);
+        // printf("Next hash: %d\n", next_hash);
+        // printf("Next location: %lf %lf\n", next[0], next[1]);
+        float new_cost = cost[current_loc] + neighbor.distance;
+        // printf("New cost: %f\n", new_cost);
+        if (cost.find(next_state) == cost.end() || new_cost < cost[next_state]) {
+          cost[next_state] = new_cost;
+          // printf("Cost in map: %lf\n", new_cost + heuristic(next, goal_pix));
+          frontier.Push(next_state, -(new_cost + LatticeHeuristic(next_state, goal_state)));
+          parent[next_state] = current_loc;
+        }
+
+        // printf("\n");
+      }
+      it++;
+    }
+
+    // const unsigned char color3[] = { 0,0,255 };
+
+    struct State curr_state = goal_state;
+    vector<struct State> path_states;
+    path_states.emplace_back(goal_state);
+    while (!(curr_state == location_state)) {
+      curr_state = parent[curr_state];
+      // Vector2f path_loc = PixelUnHash(curr_state);
+      path_states.emplace_back(curr_state);
+      // image_real.draw_point(path_loc[0],map_y_width-path_loc[1],color3);
+    }
+    // printf("")
+    // image_real.draw_point(loc_x,map_y_width-loc_y,color2);
+
+    // image_real.save("goalmap.bmp");
+    // printf("Image saved\n");
+
+    printf("States in path: %lu\n", path_states.size());
+
+    // std::reverse(path_points.begin(), path_points.end());
+    // path.clear();
+
+    // Vector2f curr_p0 = path_points[0];
+    // Vector2f curr_p1 = path_points[1];
+    // unsigned index = 2;
+    // Vector2f curr_direction = curr_p1 - curr_p0;
+    // while (index < path_points.size()) {
+    //   Vector2f next = path_points[index];
+    //   Vector2f new_direction = next - curr_p1;
+    //   if (!vEquals(new_direction, curr_direction)) {
+    //     // Terminate the line and start a new one
+    //     float p0_x = (curr_p0[0] * map_resolution) +  map_x_min;
+    //     float p0_y = (curr_p0[1] * map_resolution) +  map_y_min;
+    //     Vector2f p0 (p0_x, p0_y);
+
+    //     float p1_x = (curr_p1[0] * map_resolution) +  map_x_min;
+    //     float p1_y = (curr_p1[1] * map_resolution) +  map_y_min;
+    //     Vector2f p1 (p1_x, p1_y);
+
+    //     line2f path_line(p0, p1);
+    //     path.emplace_back(path_line);
+    //     curr_p0 = curr_p1;
+    //     curr_p1 = next;
+    //     curr_direction = new_direction;
+    //   } else {
+    //     // Extend the line
+    //     curr_p1 = next;
+    //   }
+    //   index++;
+    // }
+    // // Add final line
+    // float p0_x = (curr_p0[0] * map_resolution) +  map_x_min;
+    // float p0_y = (curr_p0[1] * map_resolution) +  map_y_min;
+    // Vector2f p0 (p0_x, p0_y);
+
+    // float p1_x = (curr_p1[0] * map_resolution) +  map_x_min;
+    // float p1_y = (curr_p1[1] * map_resolution) +  map_y_min;
+    // Vector2f p1 (p1_x, p1_y);
+    // line2f path_line(p0, p1);
+    // path.emplace_back(path_line);
+
+    // printf("Finished with plan!\n");
+    // printf("Lines in plan: %lu\n", path.size());
+
+    // DrawPlan();
+} 
+
+
 float Navigation::heuristic(Vector2f current, Vector2f goal) {
   return (current - goal).norm();
+}
+
+float Navigation::LatticeHeuristic(const struct State& current, const struct State& goal) {
+  Vector2f cur_loc (current.x, current.y);
+  Vector2f goal_loc (goal.x, goal.y);
+
+  return (cur_loc - goal_loc).norm();
 }
 
 void Navigation::UpdateLocation(const Eigen::Vector2f& loc, float angle) {
@@ -596,6 +770,38 @@ Eigen::Vector2f Navigation::GetTranslation(float velocity, float curvature, floa
 
   float distance_travelled = velocity * time;
   float distance_angle = distance_travelled / radius;
+  Eigen::Vector2f B(0,0);
+
+  float ac = radius;
+  float ab = radius;
+  float bc = 2 * radius * sin(distance_angle/2.0);
+
+  float c_y = (pow(ab,2) + pow(ac,2) - pow(bc,2)) / (2 * ab);
+  float c_x = sqrt(pow(ac,2) - pow(c_y,2));
+
+  return Eigen::Vector2f(c_x, c_y);
+}
+
+
+// Returns rotation displacement of the curve
+float Navigation::GetCurveRotation(float distance, float curvature) {
+  float theta = atan(WHEELBASE * curvature);
+  float radius = WHEELBASE / tan(theta/2);
+  Vector2f CoT(0,radius);
+
+  float distance_angle = distance / radius;
+
+  return (M_PI / 2) - distance_angle;
+}
+
+// Returns Translation displacement of the curve
+Eigen::Vector2f Navigation::GetCurveTranslation(float distance, float curvature) {
+  float theta = atan(WHEELBASE * curvature);
+  float radius = WHEELBASE / tan(theta/2);
+  Vector2f CoT(0,radius);
+
+  // float distance_travelled = velocity * time;
+  float distance_angle = distance / radius;
   Eigen::Vector2f B(0,0);
 
   float ac = radius;
