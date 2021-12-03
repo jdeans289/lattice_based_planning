@@ -41,9 +41,10 @@ namespace ros {
   class NodeHandle;
 }  // namespace ros
 
-const float kEpsilon = 1e-5;
-static bool fEquals (float a, float b) {
-  return (a >= b - kEpsilon && a <= b + kEpsilon);
+
+
+static bool sEquals (float a, float b) {
+  return (a >= b - 0.01 && a <= b + 0.01);
 }
 
 
@@ -77,17 +78,17 @@ namespace navigation {
     float theta;
 
     bool operator== (const State& other) const {
-      return fEquals(x, other.x) && fEquals(y, other.y) && fEquals(theta, other.theta);
+      return sEquals(x, other.x) && sEquals(y, other.y) && sEquals(theta, other.theta);
     }
 
     bool operator< (const State& other) const {
-      if (!fEquals(x, other.x))
+      if (!sEquals(x, other.x))
         return x < other.x;
 
-      if (!fEquals(y, other.y))
+      if (!sEquals(y, other.y))
         return y < other.y;
       
-      if (!fEquals(theta, other.theta))
+      if (!sEquals(theta, other.theta))
         return theta < other.theta;
 
       return false;
@@ -133,6 +134,7 @@ class Navigation {
 
   bool CheckCurveForCollision (const struct State& cur_state, const struct State& end_state, const struct CurveOption& option);
 
+  bool CheckGoalCondition(const struct State& cur_state, const struct State& goal_state);
 
 
 

@@ -58,6 +58,10 @@ AckermannCurvatureDriveMsg drive_msg_;
 } //namespace
 
 
+const float kEpsilon = 1e-5;
+bool fEquals (float a, float b) {
+  return (a >= b - kEpsilon && a <= b + kEpsilon);
+}
 
 bool vEquals (Eigen::Vector2f a, Eigen::Vector2f b) {
   return fEquals(a[0], b[0]) && fEquals(a[1], b[1]);
@@ -93,7 +97,7 @@ Navigation::Navigation(const string& map_file, ros::NodeHandle* n) :
   neighbors.emplace_back(-1,0);
   neighbors.emplace_back(-1,-1);
 
-  for (float i = -1; i <= 1; i += 0.2) {
+  for (float i = -.4; i <= .4; i += 0.2) {
       CurveOption c;
       c.curvature = i;
 
@@ -104,6 +108,8 @@ Navigation::Navigation(const string& map_file, ros::NodeHandle* n) :
   }
 
   BuildGraph(map_file);
+
+ 
 
 
 
@@ -314,12 +320,34 @@ struct State Navigation::AddCurveToState(const struct State& cur_state, const st
   Vector2f translation = GetCurveTranslation(option.distance, option.curvature);
   float rotation = GetCurveRotation(option.distance, option.curvature);
 
+  printf("Trying curve: curvature %f\tdistance: %f\n", option.curvature, option.distance);
+  printf("\ttranslation: %f %f\trotation: %f\n", translation[0], translation[1], rotation);
+  // PrintState(cur_state);
+
   return StateFactory(cur_state.x + translation[0], cur_state.y + translation[1], cur_state.theta + rotation);
 }
 
 bool Navigation::CheckCurveForCollision (const struct State& cur_state, const struct State& end_state, const struct CurveOption& option) {
   return false;
 }
+
+void PrintState(const struct State& state) {
+  printf("State x: %f\ty: %f\ttheta: %f\n", (double)state.x, (double)state.y, (double)state.theta);
+}
+
+// "close enough"
+bool Navigation::CheckGoalCondition(const struct State& cur_state, const struct State& goal_state) {
+  // let's call goal tolerance within 0.5 m and pi/2 degrees
+  
+  Vector2f curr_pos(cur_state.x, cur_state.y);
+  Vector2f goal_pos(goal_state.x, goal_state.y);
+
+  if ((curr_pos - goal_pos).norm() < 0.5 && abs(cur_state.theta - goal_state.theta) < M_PI / 2) {
+    return true;
+  }
+  return false;
+
+} 
 
 void Navigation::MakeLatticePlan() {
 
@@ -329,6 +357,7 @@ void Navigation::MakeLatticePlan() {
     // const unsigned char color2[] = { 0,255,0 };
 
     struct State location_state = StateFactory(robot_loc_[0], robot_loc_[1], robot_angle_);
+    PrintState(location_state);
 
     // int goal_x = (GOAL[0] - map_x_min) / map_resolution;
     // int goal_y = (GOAL[1] - map_y_min) / map_resolution;
@@ -336,7 +365,7 @@ void Navigation::MakeLatticePlan() {
     // int goal_hash = PixelHash(goal_pix);
 
     struct State goal_state = StateFactory(GOAL[0], GOAL[1], GOAL_ANGLE);
-
+    PrintState(goal_state);
 
     // const unsigned char color[] = { 255,0,0 };
     // image_real.draw_point(goal_pix[0],map_y_width-goal_pix[1],color);
@@ -356,7 +385,7 @@ void Navigation::MakeLatticePlan() {
 
     // printf("Begin hash: %d\n", PixelHash(loc_pix));
     // printf("Goal Hash: %d\n", goal_hash);
-
+    int failed = 1; 
     printf("Starting lattice based exploration\n");
     int it = 0;
     while (!frontier.Empty()) {
@@ -367,17 +396,22 @@ void Navigation::MakeLatticePlan() {
 
       // printf("\n\n**********************Iteration %d*******************************\n", it);
       struct State current_loc = frontier.Pop();
+      printf ("Current state:\n\t");
+      PrintState(current_loc);
       // printf("Current hash: %d\n", current_hash);
       // Eigen::Vector2f current = PixelUnHash(current_hash);
       // printf("Current location: %lf %lf\n", current[0], current[1]);
-      if (current_loc == goal_state) {
+      if (CheckGoalCondition(current_loc, goal_state)) {
         printf("Found goal!\n");
+        failed = 0;
         break;
       }
 
       for (struct CurveOption neighbor : CurveOptions) {
 
         struct State next_state = AddCurveToState(current_loc, neighbor);
+        
+        PrintState(next_state);
 
         // check for collisions
         if (CheckCurveForCollision(current_loc, next_state, neighbor))
@@ -399,6 +433,12 @@ void Navigation::MakeLatticePlan() {
       }
       it++;
     }
+
+    if (failed) {
+      printf("Plan failed\n");
+      return;
+    }
+
 
     // const unsigned char color3[] = { 0,0,255 };
 
@@ -791,7 +831,16 @@ float Navigation::GetCurveRotation(float distance, float curvature) {
 
   float distance_angle = distance / radius;
 
-  return (M_PI / 2) - distance_angle;
+  return distance_angle;
+}
+
+Eigen::Matrix2f GetRotationMatrix (const float angle) {
+  Eigen::Matrix2f rot;
+  rot(0,0) = cos(angle);
+  rot(0,1) = -sin(angle);
+  rot(1,0) = sin(angle);
+  rot(1,1) = cos(angle);
+  return rot;
 }
 
 // Returns Translation displacement of the curve
@@ -804,14 +853,25 @@ Eigen::Vector2f Navigation::GetCurveTranslation(float distance, float curvature)
   float distance_angle = distance / radius;
   Eigen::Vector2f B(0,0);
 
-  float ac = radius;
-  float ab = radius;
+
+  // float ac = radius;
+  // float ab = radius;
   float bc = 2 * radius * sin(distance_angle/2.0);
 
-  float c_y = (pow(ab,2) + pow(ac,2) - pow(bc,2)) / (2 * ab);
-  float c_x = sqrt(pow(ac,2) - pow(c_y,2));
+  Vector2f translation(bc, 0);
 
-  return Eigen::Vector2f(c_x, c_y);
+  Eigen::Matrix2f rot = GetRotationMatrix(distance_angle);
+  printf("Total distance: %f\n", bc);
+
+
+  return rot * translation;
+
+
+  // float c_y = (pow(ab,2) + pow(ac,2) - pow(bc,2)) / (2 * ab);
+  // float c_x = sqrt(pow(ac,2) - pow(c_y,2));
+
+
+  // return Eigen::Vector2f(c_x, c_y);
 }
 
 void Navigation::GetClearance (struct PathOption& option) {
