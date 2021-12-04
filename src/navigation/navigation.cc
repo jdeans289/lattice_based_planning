@@ -340,7 +340,31 @@ void Navigation::MakePlan() {
 //   return ;
 // }
 
+bool Navigation::CheckPointForCollision(const Eigen::Vector2f& point) {
+
+  int pixel_x = (point[0] - map_x_min) / map_resolution;
+  int pixel_y = (point[1] - map_y_min) / map_resolution;
+
+  return occupancy_grid[pixel_x][pixel_y];
+}
+
 bool Navigation::CheckCurveForCollision (const struct State& cur_state, const struct State& end_state, const struct CurveOption& option) {
+
+  Vector2f p0 (cur_state.x, cur_state.y);
+  Vector2f p1 (end_state.x, end_state.y);
+
+  Vector2f connect = p1 - p0;
+  float length = connect.norm();
+  float increment = 0;
+  while (increment < length) {
+    Vector2f point_to_check = p0 + (increment/length) * connect;
+
+    if (CheckPointForCollision(point_to_check))
+      return true;
+
+    increment += 0.25;
+  }
+
   return false;
 }
 
@@ -555,26 +579,66 @@ void Navigation::VisualizeLatticePath() {
   if (path_states.size() == 0)
     return;
 
-  Vector2f cumulative_transform(0,0);
-  float cumulative_heading = 0;
+  // Vector2f cumulative_transform(0,0);
+  // float cumulative_heading = 0;
   for (unsigned i = 0; i < path_states.size()-1; i++) {
-    // draw lines for now
+    // // draw lines for now
     Vector2f p0(path_states[i].x, path_states[i].y);
     Vector2f p1(path_states[i+1].x, path_states[i+1].y);
 
-    Vector2f diff = p1 - p0;
-    float diff_angle = path_states[i+1].theta - path_states[i].theta;
+    // Vector2f diff = p1 - p0;
+    // float diff_angle = path_states[i+1].theta - path_states[i].theta;
 
-    Matrix2f rot = GetRotationMatrix(cumulative_heading);
-    diff = cumulative_transform + rot * diff;
+    // Matrix2f rot = GetRotationMatrix(cumulative_heading);
+    // diff = cumulative_transform + rot * diff;
+    if (path_states[i].theta == path_states[i+1].theta) {
+      visualization::DrawLine(p0, p1, 0xFF0000, global_viz_msg_);
+    } else {
+      Eigen::Vector2f center;
+      if (path_states[i].theta == 0 || path_states[i].theta == M_PI) {
+        // Going x direction
+        center[0] = path_states[i].x;
+        center[1] = path_states[i+1].y;
+      } else {
+        // Going y direction
+        center[0] = path_states[i+1].x;
+        center[1] = path_states[i].y;
+      }
 
-    visualization::DrawLine(cumulative_transform,  diff, 0xFF0000, local_viz_msg_);
+      float start_angle;
+      float end_angle;
+
+      if( fEquals(path_states[i+1].theta - path_states[i].theta, M_PI/2)) {
+        // Turning left
+        printf("turning left");
+        start_angle = -M_PI / 2 + path_states[i+1].theta;
+        end_angle = 0 + path_states[i+1].theta;
+
+
+      } else {
+        printf("Turning right");
+        // Turning right
+        start_angle = 0 - path_states[i+1].theta;
+        end_angle = -M_PI / 2 - path_states[i+1].theta;
+      }
+      // Eigen::Vector2f center();
+        printf("Start angle: %f, end angle: %f\n", start_angle, end_angle);
+
+      float radius = 1.0;
+
+      // float start_angle = 0;
+      // float end_angle = path_states[i+1].theta;
+
+
+
+      visualization::DrawArc(center, radius, start_angle, end_angle, 0xFF0000, global_viz_msg_);
+    }
 
     // printf("Drawing line from %f %f to %f %f\n", cumulative_transform[0], cumulative_transform[1], diff[0], diff[1]);
 
 
-    cumulative_transform = diff;
-    cumulative_heading += diff_angle;
+    // cumulative_transform = diff;
+    // cumulative_heading += diff_angle;
 
     //
 

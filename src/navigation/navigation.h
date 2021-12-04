@@ -141,6 +141,8 @@ class Navigation {
 
   struct State AddTransform (const struct State& cur_state, const struct CurveOption& option);
 
+  bool CheckPointForCollision(const Eigen::Vector2f& point);
+
 
 
 
