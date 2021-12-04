@@ -35,6 +35,7 @@
 #include "visualization/CImg.h"
 
 using Eigen::Vector2f;
+using Eigen::Matrix2f;
 using amrl_msgs::AckermannCurvatureDriveMsg;
 using amrl_msgs::VisualizationMsg;
 using std::string;
@@ -97,15 +98,25 @@ Navigation::Navigation(const string& map_file, ros::NodeHandle* n) :
   neighbors.emplace_back(-1,0);
   neighbors.emplace_back(-1,-1);
 
-  for (float i = -.4; i <= .4; i += 0.2) {
-      CurveOption c;
-      c.curvature = i;
+  // for (float i = -.4; i <= .4; i += 0.2) {
+  CurveOption forward;
+  forward.translation = Eigen::Vector2f(1, 0);
+  forward.heading = 0;
 
-      // Change the distance to always end up at a resolution of 0.1
-      c.distance = 0.1; 
+  CurveOption left;
+  left.translation = Eigen::Vector2f(1, 1);
+  left.heading = M_PI / 2;
 
-      CurveOptions.emplace_back(c);
-  }
+  CurveOption right;
+  right.translation = Eigen::Vector2f(1, -1);
+  right.heading = -(M_PI / 2);
+
+  CurveOptions.emplace_back(forward);
+  CurveOptions.emplace_back(left);
+  CurveOptions.emplace_back(right);
+
+
+  // }
 
   BuildGraph(map_file);
 
@@ -316,16 +327,18 @@ void Navigation::MakePlan() {
     DrawPlan();
 } 
 
-struct State Navigation::AddCurveToState(const struct State& cur_state, const struct CurveOption& option) {
-  Vector2f translation = GetCurveTranslation(option.distance, option.curvature);
-  float rotation = GetCurveRotation(option.distance, option.curvature);
+// struct State Navigation::AddCurveToState(const struct State& cur_state, const struct CurveOption& option) {
+//   // Vector2f translation = GetCurveTranslation(option.distance, option.curvature);
+//   // float rotation = GetCurveRotation(option.distance, option.curvature);
 
-  printf("Trying curve: curvature %f\tdistance: %f\n", option.curvature, option.distance);
-  printf("\ttranslation: %f %f\trotation: %f\n", translation[0], translation[1], rotation);
-  // PrintState(cur_state);
+//   // printf("Trying curve: curvature %f\tdistance: %f\n", option.curvature, option.distance);
+//   // printf("\ttranslation: %f %f\trotation: %f\n", translation[0], translation[1], rotation);
+//   // PrintState(cur_state);
 
-  return StateFactory(cur_state.x + translation[0], cur_state.y + translation[1], cur_state.theta + rotation);
-}
+
+
+//   return ;
+// }
 
 bool Navigation::CheckCurveForCollision (const struct State& cur_state, const struct State& end_state, const struct CurveOption& option) {
   return false;
@@ -349,30 +362,51 @@ bool Navigation::CheckGoalCondition(const struct State& cur_state, const struct 
 
 } 
 
-void Navigation::MakeLatticePlan() {
+struct State Navigation::AddTransform (const struct State& cur_state, const struct CurveOption& option) {
+  struct State transformed_state;
 
-    // int loc_x = (robot_loc_[0] - map_x_min) / map_resolution;
-    // int loc_y = (robot_loc_[1] - map_y_min) / map_resolution;
-    // Vector2f loc_pix(loc_x, loc_y);
-    // const unsigned char color2[] = { 0,255,0 };
+  Eigen::Vector2f new_pos(cur_state.x, cur_state.y);
+
+  Eigen::Matrix2f rot = GetRotationMatrix(cur_state.theta);
+
+  new_pos += rot * option.translation; 
+
+  transformed_state.x = new_pos[0];
+  transformed_state.y = new_pos[1];
+  transformed_state.theta = cur_state.theta + option.heading;
+
+  return transformed_state;
+}
+
+// std::vector<struct State> Navigation::GetNextStates(const struct State& cur_state) {
+//   // for now, the other states are straight, left, right, backwards left right.
+
+//   // Find some min distance that the robot can make a 90 degree turn 
+//   float distance = 1.0;
+
+//   // Rotate the transform to be correct
+//   Eigen::Matrix2f rot = GetRotationMatrix(cur_state.theta);
+
+//   Eigen::Vector2f forward (distance, 0);
+//   Eigen::Vector2f left (distance, distance);
+//   Eigen::Vector2f right (distance, -distance);
+
+//   std::vector<struct State> neighbors;
+
+//   neighbors.emplace_back();
+
+//   return neighbors;
+
+//   // struct State forward = StateFactory(cur_state[0], cur_state[1], cur_state.theta);
+// }
+
+void Navigation::MakeLatticePlan() {
 
     struct State location_state = StateFactory(robot_loc_[0], robot_loc_[1], robot_angle_);
     PrintState(location_state);
 
-    // int goal_x = (GOAL[0] - map_x_min) / map_resolution;
-    // int goal_y = (GOAL[1] - map_y_min) / map_resolution;
-    // Vector2f goal_pix(goal_x, goal_y);
-    // int goal_hash = PixelHash(goal_pix);
-
     struct State goal_state = StateFactory(GOAL[0], GOAL[1], GOAL_ANGLE);
     PrintState(goal_state);
-
-    // const unsigned char color[] = { 255,0,0 };
-    // image_real.draw_point(goal_pix[0],map_y_width-goal_pix[1],color);
-    
-    // printf("Goal: %lf %lf\n", goal_pix[0], goal_pix[1]);
-    // printf("loc: %d %d\n", loc_x, loc_y);
-
 
     SimpleQueue<struct State, float> frontier;
     frontier.Push(location_state, 0);
@@ -396,8 +430,8 @@ void Navigation::MakeLatticePlan() {
 
       // printf("\n\n**********************Iteration %d*******************************\n", it);
       struct State current_loc = frontier.Pop();
-      printf ("Current state:\n\t");
-      PrintState(current_loc);
+      // printf ("Current state:\n\t");
+      // PrintState(current_loc);
       // printf("Current hash: %d\n", current_hash);
       // Eigen::Vector2f current = PixelUnHash(current_hash);
       // printf("Current location: %lf %lf\n", current[0], current[1]);
@@ -409,9 +443,9 @@ void Navigation::MakeLatticePlan() {
 
       for (struct CurveOption neighbor : CurveOptions) {
 
-        struct State next_state = AddCurveToState(current_loc, neighbor);
+        struct State next_state = AddTransform(current_loc, neighbor);
         
-        PrintState(next_state);
+        // PrintState(next_state);
 
         // check for collisions
         if (CheckCurveForCollision(current_loc, next_state, neighbor))
@@ -420,7 +454,7 @@ void Navigation::MakeLatticePlan() {
         // int next_hash = PixelHash(next);
         // printf("Next hash: %d\n", next_hash);
         // printf("Next location: %lf %lf\n", next[0], next[1]);
-        float new_cost = cost[current_loc] + neighbor.distance;
+        float new_cost = cost[current_loc] + neighbor.translation.norm();
         // printf("New cost: %f\n", new_cost);
         if (cost.find(next_state) == cost.end() || new_cost < cost[next_state]) {
           cost[next_state] = new_cost;
@@ -443,7 +477,7 @@ void Navigation::MakeLatticePlan() {
     // const unsigned char color3[] = { 0,0,255 };
 
     struct State curr_state = goal_state;
-    vector<struct State> path_states;
+    path_states.clear();
     path_states.emplace_back(goal_state);
     while (!(curr_state == location_state)) {
       curr_state = parent[curr_state];
@@ -459,7 +493,15 @@ void Navigation::MakeLatticePlan() {
 
     printf("States in path: %lu\n", path_states.size());
 
-    // std::reverse(path_points.begin(), path_points.end());
+    std::reverse(path_states.begin(), path_states.end());
+    for (unsigned i = 0; i < path_states.size(); i++) {
+      printf("State %d: ", i);
+      PrintState(path_states[i]);
+    }
+
+    VisualizeLatticePath();
+
+
     // path.clear();
 
     // Vector2f curr_p0 = path_points[0];
@@ -506,6 +548,38 @@ void Navigation::MakeLatticePlan() {
 
     // DrawPlan();
 } 
+
+void Navigation::VisualizeLatticePath() {
+  
+  // visualization::DrawLine(line.p0, line.p1,0xFF0000,global_viz_msg_);
+  if (path_states.size() == 0)
+    return;
+
+  Vector2f cumulative_transform(0,0);
+  float cumulative_heading = 0;
+  for (unsigned i = 0; i < path_states.size()-1; i++) {
+    // draw lines for now
+    Vector2f p0(path_states[i].x, path_states[i].y);
+    Vector2f p1(path_states[i+1].x, path_states[i+1].y);
+
+    Vector2f diff = p1 - p0;
+    float diff_angle = path_states[i+1].theta - path_states[i].theta;
+
+    Matrix2f rot = GetRotationMatrix(cumulative_heading);
+    diff = cumulative_transform + rot * diff;
+
+    visualization::DrawLine(cumulative_transform,  diff, 0xFF0000, local_viz_msg_);
+
+    // printf("Drawing line from %f %f to %f %f\n", cumulative_transform[0], cumulative_transform[1], diff[0], diff[1]);
+
+
+    cumulative_transform = diff;
+    cumulative_heading += diff_angle;
+
+    //
+
+  }
+}
 
 
 float Navigation::heuristic(Vector2f current, Vector2f goal) {
@@ -631,6 +705,7 @@ float* Navigation::Simple1DTOC()
     DrawCar();
     DrawArcs(curvature, dist);
     DrawPlan();
+    VisualizeLatticePath();
   }
 
   // Distance needed to deccelerate
@@ -834,7 +909,7 @@ float Navigation::GetCurveRotation(float distance, float curvature) {
   return distance_angle;
 }
 
-Eigen::Matrix2f GetRotationMatrix (const float angle) {
+Eigen::Matrix2f Navigation::GetRotationMatrix (const float angle) {
   Eigen::Matrix2f rot;
   rot(0,0) = cos(angle);
   rot(0,1) = -sin(angle);

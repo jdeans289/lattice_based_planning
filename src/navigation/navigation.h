@@ -68,8 +68,11 @@ namespace navigation {
   };
 
   struct CurveOption {
-    float curvature;
-    float distance;
+    Eigen::Vector2f translation;
+    float heading;
+
+    // May in the future store info about actual curve
+
   };
 
   struct State {
@@ -136,6 +139,8 @@ class Navigation {
 
   bool CheckGoalCondition(const struct State& cur_state, const struct State& goal_state);
 
+  struct State AddTransform (const struct State& cur_state, const struct CurveOption& option);
+
 
 
 
@@ -149,8 +154,8 @@ class Navigation {
 
   bool occupancy_grid [map_x_width][map_y_width];
 
-  static constexpr float state_theta_resolution = 0.1;
-  static constexpr float state_xy_resolution = 0.1;
+  static constexpr float state_theta_resolution = M_PI / 2;
+  static constexpr float state_xy_resolution = 1.0;
 
 
   std::map<struct State, float> StateMap;
@@ -191,6 +196,9 @@ class Navigation {
   void GetClearance (struct PathOption& option);
 
   void TransformPointCloud(float dx, float dy, float theta);
+  Eigen::Matrix2f GetRotationMatrix (const float angle);
+
+  void VisualizeLatticePath();
 
 
   void DrawCar();
@@ -243,6 +251,8 @@ class Navigation {
   float GetRotation(float velocity, float curvature, float time);
 
   std::vector<line2f> path;
+  std::vector<struct State> path_states;
+
 
   void MakePlan();
   void MakeLatticePlan();
