@@ -111,9 +111,26 @@ Navigation::Navigation(const string& map_file, ros::NodeHandle* n) :
   right.translation = Eigen::Vector2f(1, -1);
   right.heading = -(M_PI / 2);
 
+
+  CurveOption back;
+  back.translation = Eigen::Vector2f(-1, 0);
+  back.heading = 0;
+
+  CurveOption back_left;
+  back_left.translation = Eigen::Vector2f(-1, 1);
+  back_left.heading = -(M_PI / 2);
+
+  CurveOption back_right;
+  back_right.translation = Eigen::Vector2f(-1, -1);
+  back_right.heading = (M_PI / 2);
+
   CurveOptions.emplace_back(forward);
   CurveOptions.emplace_back(left);
   CurveOptions.emplace_back(right);
+
+  CurveOptions.emplace_back(back);
+  CurveOptions.emplace_back(back_left);
+  CurveOptions.emplace_back(back_right);
 
 
   // }
@@ -438,8 +455,15 @@ void Navigation::MakeLatticePlan() {
     std::map<struct State, float> cost;
     cost[location_state] = 0;
 
-    std::map<struct State, struct State> parent;
-    parent[location_state] = location_state;
+    std::map<struct State, struct PathNode> parent;
+    CurveOption no_action;
+    no_action.translation = Eigen::Vector2f(0,0);
+    no_action.heading = 0;
+
+    // PathNode start;
+    // start.state = location_state;
+    // start.curve = no_action;
+    // parent[location_state] = start;
 
     // printf("Begin hash: %d\n", PixelHash(loc_pix));
     // printf("Goal Hash: %d\n", goal_hash);
@@ -484,7 +508,10 @@ void Navigation::MakeLatticePlan() {
           cost[next_state] = new_cost;
           // printf("Cost in map: %lf\n", new_cost + heuristic(next, goal_pix));
           frontier.Push(next_state, -(new_cost + LatticeHeuristic(next_state, goal_state)));
-          parent[next_state] = current_loc;
+          struct PathNode curr_path;
+          curr_path.state = current_loc;
+          curr_path.curve = neighbor;
+          parent[next_state] = curr_path;
         }
 
         // printf("\n");
@@ -499,14 +526,20 @@ void Navigation::MakeLatticePlan() {
 
 
     // const unsigned char color3[] = { 0,0,255 };
+    struct PathNode goal_node;
+    goal_node.state = goal_state;
+    goal_node.curve = no_action;
+    // struct State curr_state = goal_state;
 
-    struct State curr_state = goal_state;
+    struct PathNode curr_node;
+    curr_node.state = goal_state;
+
     path_states.clear();
-    path_states.emplace_back(goal_state);
-    while (!(curr_state == location_state)) {
-      curr_state = parent[curr_state];
+    path_states.emplace_back(goal_node);
+    while (!(curr_node.state == location_state)) {
+      curr_node = parent[curr_node.state];
       // Vector2f path_loc = PixelUnHash(curr_state);
-      path_states.emplace_back(curr_state);
+      path_states.emplace_back(curr_node);
       // image_real.draw_point(path_loc[0],map_y_width-path_loc[1],color3);
     }
     // printf("")
@@ -520,7 +553,7 @@ void Navigation::MakeLatticePlan() {
     std::reverse(path_states.begin(), path_states.end());
     for (unsigned i = 0; i < path_states.size(); i++) {
       printf("State %d: ", i);
-      PrintState(path_states[i]);
+      PrintState(path_states[i].state);
     }
 
     VisualizeLatticePath();
@@ -582,52 +615,55 @@ void Navigation::VisualizeLatticePath() {
   // Vector2f cumulative_transform(0,0);
   // float cumulative_heading = 0;
   for (unsigned i = 0; i < path_states.size()-1; i++) {
-    // // draw lines for now
-    Vector2f p0(path_states[i].x, path_states[i].y);
-    Vector2f p1(path_states[i+1].x, path_states[i+1].y);
+    // draw lines for now
+    State s1 = path_states[i].state;
+    State s2 = path_states[i+1].state;
+
+    Vector2f p0(s1.x, s1.y);
+    Vector2f p1(s2.x, s2.y);
 
     // Vector2f diff = p1 - p0;
-    // float diff_angle = path_states[i+1].theta - path_states[i].theta;
+    // float diff_angle = s2.theta - s1.theta;
 
     // Matrix2f rot = GetRotationMatrix(cumulative_heading);
     // diff = cumulative_transform + rot * diff;
-    if (path_states[i].theta == path_states[i+1].theta) {
+    if (s1.theta == s2.theta) {
       visualization::DrawLine(p0, p1, 0xFF0000, global_viz_msg_);
     } else {
       Eigen::Vector2f center;
-      if (path_states[i].theta == 0 || path_states[i].theta == M_PI) {
+      if (s1.theta == 0 || s1.theta == M_PI) {
         // Going x direction
-        center[0] = path_states[i].x;
-        center[1] = path_states[i+1].y;
+        center[0] = s1.x;
+        center[1] = s2.y;
       } else {
         // Going y direction
-        center[0] = path_states[i+1].x;
-        center[1] = path_states[i].y;
+        center[0] = s2.x;
+        center[1] = s1.y;
       }
 
       float start_angle;
       float end_angle;
 
-      if( fEquals(path_states[i+1].theta - path_states[i].theta, M_PI/2)) {
+      if( fEquals(s2.theta - s1.theta, M_PI/2)) {
         // Turning left
-        printf("turning left");
-        start_angle = -M_PI / 2 + path_states[i+1].theta;
-        end_angle = 0 + path_states[i+1].theta;
+        // printf("turning left");
+        start_angle = -M_PI / 2 + s2.theta;
+        end_angle = 0 + s2.theta;
 
 
       } else {
-        printf("Turning right");
+        // printf("Turning right");
         // Turning right
-        start_angle = 0 - path_states[i+1].theta;
-        end_angle = -M_PI / 2 - path_states[i+1].theta;
+        start_angle = 0 - s2.theta;
+        end_angle = -M_PI / 2 - s2.theta;
       }
       // Eigen::Vector2f center();
-        printf("Start angle: %f, end angle: %f\n", start_angle, end_angle);
+        // printf("Start angle: %f, end angle: %f\n", start_angle, end_angle);
 
       float radius = 1.0;
 
       // float start_angle = 0;
-      // float end_angle = path_states[i+1].theta;
+      // float end_angle = s2.theta;
 
 
 

@@ -72,7 +72,7 @@ namespace navigation {
     float heading;
 
     // May in the future store info about actual curve
-
+    
   };
 
   struct State {
@@ -95,6 +95,19 @@ namespace navigation {
         return theta < other.theta;
 
       return false;
+    }
+  };
+
+  struct PathNode {
+    struct State state;
+    struct CurveOption curve;
+
+    bool operator< (const PathNode& other) const {
+      return state < other.state;
+    }
+
+    bool operator== (const PathNode& other) const {
+      return state == other.state;
     }
   };
 
@@ -253,7 +266,7 @@ class Navigation {
   float GetRotation(float velocity, float curvature, float time);
 
   std::vector<line2f> path;
-  std::vector<struct State> path_states;
+  std::vector<struct PathNode> path_states;
 
 
   void MakePlan();
