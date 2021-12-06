@@ -71,8 +71,11 @@ namespace navigation {
     Eigen::Vector2f translation;
     float heading;
 
+    bool backwards;
     // May in the future store info about actual curve
-    
+
+    float curvature;
+
   };
 
   struct State {
@@ -110,7 +113,6 @@ namespace navigation {
       return state == other.state;
     }
   };
-
 
 
 class Navigation {
@@ -156,6 +158,7 @@ class Navigation {
 
   bool CheckPointForCollision(const Eigen::Vector2f& point);
 
+  float* GetLatticeAction (); 
 
 
 
@@ -290,6 +293,12 @@ class Navigation {
 
   float previous_velocity = 0;
   float previous_curvature = 0;
+
+  bool start_plan = false;
+  bool plan_active = false;
+
+  float total_distance = 0;
+  Eigen::Vector2f previous_loc; 
 
   Eigen::Vector2f obstacle; 
 

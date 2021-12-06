@@ -102,27 +102,38 @@ Navigation::Navigation(const string& map_file, ros::NodeHandle* n) :
   CurveOption forward;
   forward.translation = Eigen::Vector2f(1, 0);
   forward.heading = 0;
+  forward.backwards = false;
+  forward.curvature = 0;
 
   CurveOption left;
   left.translation = Eigen::Vector2f(1, 1);
   left.heading = M_PI / 2;
+  left.backwards = false;
+  left.curvature = 1.0;
 
   CurveOption right;
   right.translation = Eigen::Vector2f(1, -1);
   right.heading = -(M_PI / 2);
-
+  right.backwards = false;
+  left.curvature = -1.0;
 
   CurveOption back;
   back.translation = Eigen::Vector2f(-1, 0);
   back.heading = 0;
+  back.backwards = true;
+  back.curvature = 0;
 
   CurveOption back_left;
   back_left.translation = Eigen::Vector2f(-1, 1);
   back_left.heading = -(M_PI / 2);
+  back_left.backwards = true;
+  back_left.curvature = 1.0;
 
   CurveOption back_right;
   back_right.translation = Eigen::Vector2f(-1, -1);
   back_right.heading = (M_PI / 2);
+  back_right.backwards = true;
+  back_right.curvature = -1.0;
 
   CurveOptions.emplace_back(forward);
   CurveOptions.emplace_back(left);
@@ -136,10 +147,6 @@ Navigation::Navigation(const string& map_file, ros::NodeHandle* n) :
   // }
 
   BuildGraph(map_file);
-
- 
-
-
 
 }
 
@@ -197,8 +204,11 @@ void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
   GOAL = loc;
   GOAL_ANGLE = angle;
 
-  if (localization_initialized_)
+  if (localization_initialized_) {
     MakeLatticePlan();
+    start_plan = true;
+    plan_active = false;
+  }
 
 }
 
@@ -396,7 +406,7 @@ bool Navigation::CheckGoalCondition(const struct State& cur_state, const struct 
   Vector2f curr_pos(cur_state.x, cur_state.y);
   Vector2f goal_pos(goal_state.x, goal_state.y);
 
-  if ((curr_pos - goal_pos).norm() < 0.5 && abs(cur_state.theta - goal_state.theta) < M_PI / 2) {
+  if ((curr_pos - goal_pos).norm() < 0.5 && abs(cur_state.theta - goal_state.theta) < M_PI / 4) {
     return true;
   }
   return false;
@@ -419,34 +429,14 @@ struct State Navigation::AddTransform (const struct State& cur_state, const stru
   return transformed_state;
 }
 
-// std::vector<struct State> Navigation::GetNextStates(const struct State& cur_state) {
-//   // for now, the other states are straight, left, right, backwards left right.
-
-//   // Find some min distance that the robot can make a 90 degree turn 
-//   float distance = 1.0;
-
-//   // Rotate the transform to be correct
-//   Eigen::Matrix2f rot = GetRotationMatrix(cur_state.theta);
-
-//   Eigen::Vector2f forward (distance, 0);
-//   Eigen::Vector2f left (distance, distance);
-//   Eigen::Vector2f right (distance, -distance);
-
-//   std::vector<struct State> neighbors;
-
-//   neighbors.emplace_back();
-
-//   return neighbors;
-
-//   // struct State forward = StateFactory(cur_state[0], cur_state[1], cur_state.theta);
-// }
-
 void Navigation::MakeLatticePlan() {
 
     struct State location_state = StateFactory(robot_loc_[0], robot_loc_[1], robot_angle_);
+    printf("Initial location: ");
     PrintState(location_state);
 
     struct State goal_state = StateFactory(GOAL[0], GOAL[1], GOAL_ANGLE);
+    printf("Goal location: ");
     PrintState(goal_state);
 
     SimpleQueue<struct State, float> frontier;
@@ -459,62 +449,50 @@ void Navigation::MakeLatticePlan() {
     CurveOption no_action;
     no_action.translation = Eigen::Vector2f(0,0);
     no_action.heading = 0;
+    no_action.backwards = false;
+    no_action.curvature = 0;
 
-    // PathNode start;
-    // start.state = location_state;
-    // start.curve = no_action;
-    // parent[location_state] = start;
-
-    // printf("Begin hash: %d\n", PixelHash(loc_pix));
-    // printf("Goal Hash: %d\n", goal_hash);
     int failed = 1; 
     printf("Starting lattice based exploration\n");
     int it = 0;
+
+    // Begin A* search
     while (!frontier.Empty()) {
       if (it > 500) {
         printf("Planning failed\n");
         break;
       }
 
-      // printf("\n\n**********************Iteration %d*******************************\n", it);
       struct State current_loc = frontier.Pop();
-      // printf ("Current state:\n\t");
-      // PrintState(current_loc);
-      // printf("Current hash: %d\n", current_hash);
-      // Eigen::Vector2f current = PixelUnHash(current_hash);
-      // printf("Current location: %lf %lf\n", current[0], current[1]);
       if (CheckGoalCondition(current_loc, goal_state)) {
         printf("Found goal!\n");
         failed = 0;
         break;
       }
 
+      // Check each of the possible curves in the lattice
       for (struct CurveOption neighbor : CurveOptions) {
 
         struct State next_state = AddTransform(current_loc, neighbor);
         
-        // PrintState(next_state);
-
         // check for collisions
         if (CheckCurveForCollision(current_loc, next_state, neighbor))
           continue;
 
-        // int next_hash = PixelHash(next);
-        // printf("Next hash: %d\n", next_hash);
-        // printf("Next location: %lf %lf\n", next[0], next[1]);
+        // Edge cost is the length of the curve
         float new_cost = cost[current_loc] + neighbor.translation.norm();
-        // printf("New cost: %f\n", new_cost);
+
+        // If the node has never been explored before, or if the cost is less than a previously found cost:
         if (cost.find(next_state) == cost.end() || new_cost < cost[next_state]) {
+          // Update the cost
           cost[next_state] = new_cost;
-          // printf("Cost in map: %lf\n", new_cost + heuristic(next, goal_pix));
           frontier.Push(next_state, -(new_cost + LatticeHeuristic(next_state, goal_state)));
           struct PathNode curr_path;
           curr_path.state = current_loc;
           curr_path.curve = neighbor;
+          // Add to parent list - used to reconstruct path
           parent[next_state] = curr_path;
         }
-
-        // printf("\n");
       }
       it++;
     }
@@ -529,24 +507,17 @@ void Navigation::MakeLatticePlan() {
     struct PathNode goal_node;
     goal_node.state = goal_state;
     goal_node.curve = no_action;
-    // struct State curr_state = goal_state;
 
     struct PathNode curr_node;
     curr_node.state = goal_state;
 
+    // Reconstruct path
     path_states.clear();
     path_states.emplace_back(goal_node);
     while (!(curr_node.state == location_state)) {
       curr_node = parent[curr_node.state];
-      // Vector2f path_loc = PixelUnHash(curr_state);
       path_states.emplace_back(curr_node);
-      // image_real.draw_point(path_loc[0],map_y_width-path_loc[1],color3);
     }
-    // printf("")
-    // image_real.draw_point(loc_x,map_y_width-loc_y,color2);
-
-    // image_real.save("goalmap.bmp");
-    // printf("Image saved\n");
 
     printf("States in path: %lu\n", path_states.size());
 
@@ -622,62 +593,90 @@ void Navigation::VisualizeLatticePath() {
     Vector2f p0(s1.x, s1.y);
     Vector2f p1(s2.x, s2.y);
 
-    // Vector2f diff = p1 - p0;
-    // float diff_angle = s2.theta - s1.theta;
-
-    // Matrix2f rot = GetRotationMatrix(cumulative_heading);
-    // diff = cumulative_transform + rot * diff;
     if (s1.theta == s2.theta) {
       visualization::DrawLine(p0, p1, 0xFF0000, global_viz_msg_);
     } else {
       Eigen::Vector2f center;
-      if (s1.theta == 0 || s1.theta == M_PI) {
+      float start_angle = 0;
+      float end_angle = 0;
+      if (fEquals(s1.theta, 0) || fEquals(s1.theta, M_PI) || fEquals(s1.theta, -M_PI)) {
         // Going x direction
         center[0] = s1.x;
         center[1] = s2.y;
+         
+         // Turning left
+         if( fEquals(s2.theta - s1.theta, M_PI/2)) {
+
+          // If moving in positive x direction
+          if (s2.x > s1.x)
+          {
+            start_angle = -M_PI / 2;
+            end_angle = 0;
+          }
+
+          else
+          {
+            start_angle = M_PI/2;
+            end_angle = M_PI;
+          }
+
+        }
+        // Turning right 
+        else {
+          if (s2.x > s1.x)
+          {
+            start_angle = 0;
+            end_angle = M_PI / 2;
+          }
+          
+          // When moving in negative x direction
+          else{
+            start_angle = M_PI;
+            end_angle = -M_PI/2;
+          }
+        }
+
       } else {
         // Going y direction
         center[0] = s2.x;
         center[1] = s1.y;
-      }
 
-      float start_angle;
-      float end_angle;
 
-      if( fEquals(s2.theta - s1.theta, M_PI/2)) {
+        if( fEquals(s2.theta - s1.theta, M_PI/2)) {
         // Turning left
-        // printf("turning left");
-        start_angle = -M_PI / 2 + s2.theta;
-        end_angle = 0 + s2.theta;
 
+          if (s2.y > s1.y)
+          {
+            start_angle = 0;
+            end_angle = M_PI / 2;
+          }
 
-      } else {
-        // printf("Turning right");
-        // Turning right
-        start_angle = 0 - s2.theta;
-        end_angle = -M_PI / 2 - s2.theta;
+          else{
+            start_angle = M_PI;
+            end_angle = -M_PI/2;
+          }
+          
+
+        } else {
+          // Turning right
+
+          if (s2.y > s1.y)
+          {
+            start_angle = M_PI/2;
+            end_angle = M_PI;
+          }
+
+          else{
+            start_angle = -M_PI/2;
+            end_angle = 0;
+          }
+        }
+
       }
-      // Eigen::Vector2f center();
-        // printf("Start angle: %f, end angle: %f\n", start_angle, end_angle);
 
       float radius = 1.0;
-
-      // float start_angle = 0;
-      // float end_angle = s2.theta;
-
-
-
       visualization::DrawArc(center, radius, start_angle, end_angle, 0xFF0000, global_viz_msg_);
     }
-
-    // printf("Drawing line from %f %f to %f %f\n", cumulative_transform[0], cumulative_transform[1], diff[0], diff[1]);
-
-
-    // cumulative_transform = diff;
-    // cumulative_heading += diff_angle;
-
-    //
-
   }
 }
 
@@ -694,9 +693,12 @@ float Navigation::LatticeHeuristic(const struct State& current, const struct Sta
 }
 
 void Navigation::UpdateLocation(const Eigen::Vector2f& loc, float angle) {
+  total_distance += (loc - robot_loc_).norm();
+
   localization_initialized_ = true;
   robot_loc_ = loc;
   robot_angle_ = angle;
+
 
   // printf("Location: %lf %lf\n", loc[0], loc[1]);
 }
@@ -794,17 +796,90 @@ float* Navigation::getBestCurvature() {
   return new float[2] {best_curvature, dist};
 }
 
+float* Navigation::GetLatticeAction () {
+  float curvature;
+  if (!plan_active) {
+    if (!start_plan) {
+      return new float[2] {0, 0};
+    }
+
+    // Start a new plan
+    total_distance = 0;
+    curvature = path_states[0].curve.curvature;
+
+    // bool adding_distance = true;
+    unsigned i = 1;
+
+    float ret_distance = path_states[0].curve.translation.norm();
+    bool direction = path_states[0].curve.backwards;
+
+    while (i < path_states.size()) {
+      if (direction == path_states[i].curve.backwards) {
+        ret_distance += path_states[i].curve.translation.norm();
+      } else {
+        break;
+      }
+      i++;
+    }
+
+    // if going forwards
+    if (direction == false)
+      return new float[2] {curvature, ret_distance};
+    else 
+      return new float[2] {curvature, -ret_distance};
+
+
+  } else {
+    // Continue with active plan
+    
+    // Figure out where in plan we are
+    unsigned i = 0; 
+    float accumulated_distance = 0;
+    while (i < path_states.size() && accumulated_distance + path_states[i].curve.translation.norm() < total_distance) {
+      i++;
+      accumulated_distance += path_states[i].curve.translation.norm();
+    }
+
+    // Now we know that we are leftover_distance through state i
+    float leftover_distance = total_distance - accumulated_distance;
+    float ret_distance = path_states[i].curve.translation.norm() - leftover_distance;
+
+    bool direction = path_states[i].curve.backwards;
+
+    float curvature = path_states[i].curve.curvature;
+
+    i++;
+    while (i < path_states.size()) {
+      if (direction == path_states[i].curve.backwards) {
+        ret_distance += path_states[i].curve.translation.norm();
+      } else {
+        break;
+      }
+      i++;
+    }
+
+    // if going forwards
+    if (direction == false)
+      return new float[2] {curvature, ret_distance};
+    else 
+      return new float[2] {curvature, -ret_distance};
+  }
+}
+
 float* Navigation::Simple1DTOC()
 {
   // Use curvature and distance values to implement 1D Time optimal control loop at this time step
-  float* action = getBestCurvature();
-  float curvature = action[0];
-  float dist = action[1];
+  // float* action = GetLatticeAction();
+  // float curvature = action[0];
+  // float dist = action[1];
+
+  float curvature = 0;
+  float dist = 0; 
 
   if (VISUALIZE) {
     DrawCar();
     DrawArcs(curvature, dist);
-    DrawPlan();
+    // DrawPlan();
     VisualizeLatticePath();
   }
 
@@ -879,11 +954,11 @@ void Navigation::SetGoal()
       continue; 
   } 
   
-  visualization::DrawCross(temp_goal_local, 1.0, 0x000000, global_viz_msg_);
+  // visualization::DrawCross(temp_goal_local, 1.0, 0x000000, global_viz_msg_);
 
   temp_goal = GlobalToRobot(temp_goal_local);
 
-  visualization::DrawCross(temp_goal, 1.0, 0x000FFF, local_viz_msg_);
+  // visualization::DrawCross(temp_goal, 1.0, 0x000FFF, local_viz_msg_);
   GOAL = temp_goal;
 }
 
