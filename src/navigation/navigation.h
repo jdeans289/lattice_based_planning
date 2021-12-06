@@ -255,7 +255,7 @@ class Navigation {
   Eigen::Vector2f INNER_FRONT_CORNER = Eigen::Vector2f(CAR_FRONT, CAR_INSIDE);
   Eigen::Vector2f OUTER_FRONT_CORNER = Eigen::Vector2f(CAR_FRONT, CAR_INSIDE);
 
-  const float MAX_VELOCITY = 1.0;
+  const float MAX_VELOCITY = 0.6;
   const float MAX_ACCEL = 0.4;
   const float MAX_DECEL = 0.4;
 

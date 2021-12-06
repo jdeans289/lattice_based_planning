@@ -109,13 +109,13 @@ Navigation::Navigation(const string& map_file, ros::NodeHandle* n) :
   left.translation = Eigen::Vector2f(1, 1);
   left.heading = M_PI / 2;
   left.backwards = false;
-  left.curvature = 1.0;
+  left.curvature = -1.0;
 
   CurveOption right;
   right.translation = Eigen::Vector2f(1, -1);
   right.heading = -(M_PI / 2);
   right.backwards = false;
-  left.curvature = -1.0;
+  left.curvature = 1.0;
 
   CurveOption back;
   back.translation = Eigen::Vector2f(-1, 0);
@@ -127,13 +127,13 @@ Navigation::Navigation(const string& map_file, ros::NodeHandle* n) :
   back_left.translation = Eigen::Vector2f(-1, 1);
   back_left.heading = -(M_PI / 2);
   back_left.backwards = true;
-  back_left.curvature = 1.0;
+  back_left.curvature = -1.0;
 
   CurveOption back_right;
   back_right.translation = Eigen::Vector2f(-1, -1);
   back_right.heading = (M_PI / 2);
   back_right.backwards = true;
-  back_right.curvature = -1.0;
+  back_right.curvature = 1.0;
 
   CurveOptions.emplace_back(forward);
   CurveOptions.emplace_back(left);
@@ -821,12 +821,17 @@ float* Navigation::GetLatticeAction () {
       }
       i++;
     }
+    printf("Starting new plan: %f %f\n", curvature, ret_distance);
+    plan_active = true;
+    start_plan = false;
 
     // if going forwards
     if (direction == false)
       return new float[2] {curvature, ret_distance};
     else 
       return new float[2] {curvature, -ret_distance};
+
+
 
 
   } else {
@@ -838,6 +843,14 @@ float* Navigation::GetLatticeAction () {
     while (i < path_states.size() && accumulated_distance + path_states[i].curve.translation.norm() < total_distance) {
       i++;
       accumulated_distance += path_states[i].curve.translation.norm();
+    }
+
+    if (accumulated_distance >= total_distance) {
+      printf("End of path\n");
+      // End of path
+      plan_active = false;
+      float zero = 0.0;
+      return new float[2] {zero, zero};
     }
 
     // Now we know that we are leftover_distance through state i
@@ -858,6 +871,10 @@ float* Navigation::GetLatticeAction () {
       i++;
     }
 
+
+
+    printf("Continuing plan: %f %f\n", curvature, ret_distance);
+
     // if going forwards
     if (direction == false)
       return new float[2] {curvature, ret_distance};
@@ -869,12 +886,17 @@ float* Navigation::GetLatticeAction () {
 float* Navigation::Simple1DTOC()
 {
   // Use curvature and distance values to implement 1D Time optimal control loop at this time step
-  // float* action = GetLatticeAction();
-  // float curvature = action[0];
-  // float dist = action[1];
+  float* action = GetLatticeAction();
+  float curvature = action[0];
+  float dist = action[1];
+  bool backwards = false;
+  if (dist < 0) {
+    dist = -dist;
+    backwards = true;
+  }
 
-  float curvature = 0;
-  float dist = 0; 
+  // float curvature = 0;
+  // float dist = 0; 
 
   if (VISUALIZE) {
     DrawCar();
@@ -882,26 +904,37 @@ float* Navigation::Simple1DTOC()
     // DrawPlan();
     VisualizeLatticePath();
   }
-
+  float zero = 0.0;
   // Distance needed to deccelerate
   float x3 = pow(robot_vel_[0],2) / MAX_DECEL;
   // accelerate towards vmax
   if (robot_vel_[0] < MAX_VELOCITY && dist >= x3)
   {
     float new_v = robot_vel_[0] + MAX_ACCEL * 1/20;
-    return new float[2] {curvature, std::max(float(0.2), new_v)};  
+    if (backwards) {
+      return new float[2] {curvature, std::max((float)0.2, -new_v)};  
+    } else {
+      return new float[2] {curvature, std::max((float)0.2, new_v)}; 
+    }
   }
   
   // Cruise at max velocity
   if (robot_vel_[0] == MAX_VELOCITY && dist >= x3) 
   {
-    return new float[2] {curvature, MAX_VELOCITY};
+    if (backwards) {
+      return new float[2] {curvature, MAX_VELOCITY};
+    } else {
+      return new float[2] {curvature, -MAX_VELOCITY};
+    }
   }
   
   // Stop
-  float new_v = robot_vel_[0] - MAX_DECEL * 1/10;
-  float zero = 0.0;
-  return new float[2] {curvature, std::max(new_v, zero)};
+  float new_v = robot_vel_[0] - MAX_DECEL * 1/5;
+  if (backwards) {
+    return new float[2] {curvature, std::min(-new_v, zero)};
+  } else {
+    return new float[2] {curvature, std::max(new_v, zero)};
+  }
 }
 
 void Navigation::SetGoal()
@@ -985,27 +1018,30 @@ void Navigation::Run() {
     // TODO
     // Predict where robot will be
     // Shift point cloud
-    float dx;
-    float dy;
-    float theta;
+    // float dx;
+    // float dy;
+    // float theta;
 
-    float time = 0;
+    // float time = 0;
     // Latency Compensation loop where point cloud is transformed and speed and curvature is predicted
-    while (time < LATENCY) {
-      Eigen::Vector2f delta = GetTranslation(previous_velocity, previous_curvature, time);
-      dx = delta[0];
-      dy = delta[1];
-      SetGoal();
-      theta = GetRotation(previous_velocity, previous_curvature, time);
-      TransformPointCloud(dx, dy, theta);
-      float* res = Simple1DTOC();
-      previous_curvature = res[0];
-      previous_velocity = res[1];
-      time += ((float) 1/20);
-    }
+    // while (time < LATENCY) {
+    //   Eigen::Vector2f delta = GetTranslation(previous_velocity, previous_curvature, time);
+    //   dx = delta[0];
+    //   dy = delta[1];
+    //   SetGoal();
+    //   theta = GetRotation(previous_velocity, previous_curvature, time);
+    //   TransformPointCloud(dx, dy, theta);
+    //   float* res = Simple1DTOC();
+    //   previous_curvature = res[0];
+    //   previous_velocity = res[1];
+    //   time += ((float) 1/20);
+    // }
+    float* res = Simple1DTOC();
 
-    drive_msg_.curvature = previous_curvature;
-    drive_msg_.velocity = previous_velocity;
+    drive_msg_.curvature = res[0];
+    drive_msg_.velocity = res[1];
+    // drive_msg_.curvature = 0;
+    // drive_msg_.velocity = -1;
 
   // for (auto point : point_cloud_) {
   //   visualization::DrawPoint(point,0x4287f5,local_viz_msg_);
