@@ -437,34 +437,41 @@ struct State Navigation::AddTransform (const struct State& cur_state, const stru
 void Navigation::PrecomputeObstacleChecking(struct State& location_state, 
                                             bool visited[(int) (map_x_max - map_x_min)][(int) (map_y_max - map_y_min)])
 {
-  if (it > 500)
+  // Running into seg-faults if I dont bound this...
+  if (it > 10000)
     return;
 
   int pixel_x = (location_state.x - map_x_min);
   int pixel_y = (location_state.y - map_y_min);
 
+  // Check bounds of this location state
   if (pixel_x < 0 || pixel_x >= (map_x_max - map_x_min) || pixel_y < 0 || pixel_y >= (map_y_max - map_y_min))
     return;
+
   printf("Precomputing...%d, %d %d %d\n", pixel_x, pixel_y, (map_x_max - map_x_min), (map_y_max - map_y_min));
 
+  // Check if we have already visited this pixel
   if (visited[pixel_x][pixel_y])
     return;
 
   visited[pixel_x][pixel_y] = true;
   it++;
+
+  // For all possible curve options
   for (struct CurveOption neighbor : CurveOptions) 
   {
     bool reachable = true;
     struct State next_state = AddTransform(location_state, neighbor);
     float incr = map_resolution;
 
-    // x direction
+    // Moving in x direction
     if (fEquals(location_state.theta, 0) || fEquals(location_state.theta, M_PI) || fEquals(location_state.theta, -M_PI))
     {
-      // Backwards
+      // If going backwards change direction of checking in x dim
       if (neighbor.translation[0] < 0)
         incr = map_resolution * -1;
 
+      // For first translation value check in direction to see if we run into obstacle pixel
       for (float i = 0; abs(i) <= abs(neighbor.translation[0]) && reachable; i += map_resolution)
       {
         int next_x = ((location_state.x + i) - map_x_min);
@@ -475,6 +482,7 @@ void Navigation::PrecomputeObstacleChecking(struct State& location_state,
           reachable = False;
       }
 
+      // Perform same method for the other translation
       incr = map_resolution;
       if (neighbor.translation[1] < 0)
         incr = -incr;
@@ -491,10 +499,12 @@ void Navigation::PrecomputeObstacleChecking(struct State& location_state,
 
       if (reachable)
       {
+        // If this next state is reachable without running into obstacles, continue the obstacle checking
         checking_grid[(int) (next_state.x - map_x_min)][(int) (next_state.y - map_y_min)] = true;
         PrecomputeObstacleChecking(next_state, visited);
       }
     }
+    // Travelling in y direction
     else
     {
       if (neighbor.translation[0] < 0)
@@ -526,6 +536,7 @@ void Navigation::PrecomputeObstacleChecking(struct State& location_state,
     }
     if (reachable)
     {
+      // If this next state is reachable without running into obstacles, continue the obstacle checking
       checking_grid[(int) (next_state.x - map_x_min)][(int) (next_state.y - map_y_min)] = true;
       PrecomputeObstacleChecking(next_state, visited);
     }
@@ -550,7 +561,7 @@ void Navigation::MakeLatticePlan() {
 
     printf("Starting Precomputation of Obstacle Checking\n");
     PrecomputeObstacleChecking(location_state, visited);
-    printf("GOAL CHECK: %d\n", checking_grid[(int) (goal_state.x - map_x_min)][(int) (goal_state.y - map_y_min)]);
+    printf("GOAL CHECK: %d %f %f\n", checking_grid[(int) (goal_state.x - map_x_min)][(int) (goal_state.y - map_y_min)], (goal_state.x - map_x_min), (goal_state.y - map_y_min));
 
     SimpleQueue<struct State, float> frontier;
     frontier.Push(location_state, 0);
@@ -589,7 +600,7 @@ void Navigation::MakeLatticePlan() {
         struct State next_state = AddTransform(current_loc, neighbor);
         
         // check for collisions
-        if (CheckCurveForCollision(current_loc, next_state, neighbor))
+        if (!checking_grid[(int) (next_state.x - map_x_min)][(int) (next_state.y - map_y_min)])
           continue;
 
         // Edge cost is the length of the curve
