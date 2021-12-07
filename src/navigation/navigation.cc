@@ -98,50 +98,51 @@ Navigation::Navigation(const string& map_file, ros::NodeHandle* n) :
   neighbors.emplace_back(-1,0);
   neighbors.emplace_back(-1,-1);
 
-  // for (float i = -.4; i <= .4; i += 0.2) {
-  CurveOption forward;
-  forward.translation = Eigen::Vector2f(1, 0);
-  forward.heading = 0;
-  forward.backwards = false;
-  forward.curvature = 0;
+  MakeSimpleLattice();
 
-  CurveOption left;
-  left.translation = Eigen::Vector2f(1, 1);
-  left.heading = M_PI / 2;
-  left.backwards = false;
-  left.curvature = -1.0;
+  // CurveOption forward;
+  // forward.translation = Eigen::Vector2f(1, 0);
+  // forward.heading = 0;
+  // forward.backwards = false;
+  // forward.curvature = 0;
 
-  CurveOption right;
-  right.translation = Eigen::Vector2f(1, -1);
-  right.heading = -(M_PI / 2);
-  right.backwards = false;
-  left.curvature = 1.0;
+  // CurveOption left;
+  // left.translation = Eigen::Vector2f(1, 1);
+  // left.heading = M_PI / 2;
+  // left.backwards = false;
+  // left.curvature = -1.0;
 
-  CurveOption back;
-  back.translation = Eigen::Vector2f(-1, 0);
-  back.heading = 0;
-  back.backwards = true;
-  back.curvature = 0;
+  // CurveOption right;
+  // right.translation = Eigen::Vector2f(1, -1);
+  // right.heading = -(M_PI / 2);
+  // right.backwards = false;
+  // left.curvature = 1.0;
 
-  CurveOption back_left;
-  back_left.translation = Eigen::Vector2f(-1, 1);
-  back_left.heading = -(M_PI / 2);
-  back_left.backwards = true;
-  back_left.curvature = -1.0;
+  // CurveOption back;
+  // back.translation = Eigen::Vector2f(-1, 0);
+  // back.heading = 0;
+  // back.backwards = true;
+  // back.curvature = 0;
 
-  CurveOption back_right;
-  back_right.translation = Eigen::Vector2f(-1, -1);
-  back_right.heading = (M_PI / 2);
-  back_right.backwards = true;
-  back_right.curvature = 1.0;
+  // CurveOption back_left;
+  // back_left.translation = Eigen::Vector2f(-1, 1);
+  // back_left.heading = -(M_PI / 2);
+  // back_left.backwards = true;
+  // back_left.curvature = -1.0;
 
-  CurveOptions.emplace_back(forward);
-  CurveOptions.emplace_back(left);
-  CurveOptions.emplace_back(right);
+  // CurveOption back_right;
+  // back_right.translation = Eigen::Vector2f(-1, -1);
+  // back_right.heading = (M_PI / 2);
+  // back_right.backwards = true;
+  // back_right.curvature = 1.0;
 
-  CurveOptions.emplace_back(back);
-  CurveOptions.emplace_back(back_left);
-  CurveOptions.emplace_back(back_right);
+  // CurveOptions.emplace_back(forward);
+  // CurveOptions.emplace_back(left);
+  // CurveOptions.emplace_back(right);
+
+  // CurveOptions.emplace_back(back);
+  // CurveOptions.emplace_back(back_left);
+  // CurveOptions.emplace_back(back_right);
 
 
   // }
@@ -377,22 +378,33 @@ bool Navigation::CheckPointForCollision(const Eigen::Vector2f& point) {
 
 bool Navigation::CheckCurveForCollision (const struct State& cur_state, const struct State& end_state, const struct CurveOption& option) {
 
+  // Stamp for straight
   Vector2f p0 (cur_state.x, cur_state.y);
-  Vector2f p1 (end_state.x, end_state.y);
-
-  Vector2f connect = p1 - p0;
-  float length = connect.norm();
-  float increment = 0;
-  while (increment < length) {
-    Vector2f point_to_check = p0 + (increment/length) * connect;
-
-    if (CheckPointForCollision(point_to_check))
+  Matrix2f rot = GetRotationMatrix(cur_state.theta);
+  for (const Vector2f& cell : option.stamp) {
+    Vector2f place = rot * cell;
+    if (CheckPointForCollision(p0 + place))
       return true;
-
-    increment += 0.25;
   }
-
   return false;
+  
+
+  // Vector2f p0 (cur_state.x, cur_state.y);
+  // Vector2f p1 (end_state.x, end_state.y);
+
+  // Vector2f connect = p1 - p0;
+  // float length = connect.norm();
+  // float increment = 0;
+  // while (increment < length) {
+  //   Vector2f point_to_check = p0 + (increment/length) * connect;
+
+  //   if (CheckPointForCollision(point_to_check))
+  //     return true;
+
+  //   increment += 0.25;
+  // }
+
+  // return false;
 }
 
 void PrintState(const struct State& state) {
@@ -458,7 +470,7 @@ void Navigation::MakeLatticePlan() {
 
     // Begin A* search
     while (!frontier.Empty()) {
-      if (it > 500) {
+      if (it > 5000) {
         printf("Planning failed\n");
         break;
       }
@@ -589,6 +601,14 @@ void Navigation::VisualizeLatticePath() {
     // draw lines for now
     State s1 = path_states[i].state;
     State s2 = path_states[i+1].state;
+
+    Matrix2f rot = GetRotationMatrix(path_states[i].state.theta);
+    Vector2f point (s1.x, s1.y);
+
+    for (const Vector2f& cell : path_states[i].curve.stamp) {
+      Vector2f place = point + (rot * cell);
+      visualization::DrawCross(place, 0.125, 0x00FF00,global_viz_msg_);
+    }
 
     Vector2f p0(s1.x, s1.y);
     Vector2f p1(s2.x, s2.y);
@@ -840,12 +860,12 @@ float* Navigation::GetLatticeAction () {
     // Figure out where in plan we are
     unsigned i = 0; 
     float accumulated_distance = 0;
-    while (i < path_states.size() && accumulated_distance + path_states[i].curve.translation.norm() < total_distance) {
+    while (i < path_states.size()-1 && accumulated_distance + path_states[i].curve.translation.norm() < total_distance) {
       i++;
       accumulated_distance += path_states[i].curve.translation.norm();
     }
 
-    if (accumulated_distance >= total_distance) {
+    if (i >= path_states.size()) {
       printf("End of path\n");
       // End of path
       plan_active = false;
@@ -1036,12 +1056,15 @@ void Navigation::Run() {
     //   previous_velocity = res[1];
     //   time += ((float) 1/20);
     // }
-    float* res = Simple1DTOC();
+    // float* res = Simple1DTOC();
 
-    drive_msg_.curvature = res[0];
-    drive_msg_.velocity = res[1];
-    // drive_msg_.curvature = 0;
-    // drive_msg_.velocity = -1;
+    // drive_msg_.curvature = res[0];
+    // drive_msg_.velocity = res[1];
+    drive_msg_.curvature = 0;
+    drive_msg_.velocity = 0;
+
+    VisualizeLatticePath();
+    DrawCar();
 
   // for (auto point : point_cloud_) {
   //   visualization::DrawPoint(point,0x4287f5,local_viz_msg_);

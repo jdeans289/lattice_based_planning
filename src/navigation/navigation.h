@@ -68,13 +68,19 @@ namespace navigation {
   };
 
   struct CurveOption {
+    // change in position and heading that this curve makes
     Eigen::Vector2f translation;
     float heading;
 
+    // Is this curve driving forwards or backwards?
     bool backwards;
-    // May in the future store info about actual curve
 
     float curvature;
+    
+    // Edge cost to use in planning
+    float cost;
+    // Cells to obstacle check
+    std::vector<Eigen::Vector2f> stamp;
 
   };
 
@@ -179,10 +185,6 @@ class Navigation {
   std::map<struct State, float> StateMap;
   std::vector<struct CurveOption> CurveOptions;
 
-  
-
-
-
   // Rounds x, y, theta to a multiple of 0.1
   struct State StateFactory(float x, float y, float theta) {
     struct State newState;
@@ -191,6 +193,161 @@ class Navigation {
     newState.y = round(y / state_xy_resolution) * state_xy_resolution;
     newState.theta = round(theta / state_theta_resolution) * state_theta_resolution;
     return newState;
+  }
+
+  void MakeSimpleLattice() {
+    CurveOptions.clear();
+    CurveOption forward = CurveFactory(Eigen::Vector2f(1, 0), 0, false, 0);
+    forward.stamp.emplace_back(0,0);
+    forward.stamp.emplace_back(.25,0);
+    forward.stamp.emplace_back(.5,0);
+    forward.stamp.emplace_back(.75,0);
+    forward.stamp.emplace_back(1,0);
+    forward.stamp.emplace_back(0,-.25);
+    forward.stamp.emplace_back(.25,-.25);
+    forward.stamp.emplace_back(.5,-.25);
+    forward.stamp.emplace_back(.75,-.25);
+    forward.stamp.emplace_back(1,-.25);
+    // forward.stamp.emplace_back(0,.25);
+    // forward.stamp.emplace_back(.25,.25);
+    // forward.stamp.emplace_back(.5,.25);
+    // forward.stamp.emplace_back(.75,.25);
+    // forward.stamp.emplace_back(1,.25);
+
+
+
+    CurveOption left = CurveFactory(Eigen::Vector2f(1, 1), M_PI/2, false, -1.0);
+    left.stamp.emplace_back(-.25,-.25);
+    left.stamp.emplace_back(-.25,0);
+
+    left.stamp.emplace_back(0,-.25);
+    left.stamp.emplace_back(0,0);
+
+    left.stamp.emplace_back(.25,-.25);
+    left.stamp.emplace_back(.25,0);
+    left.stamp.emplace_back(.25,-.25);
+
+    left.stamp.emplace_back(.5,0);
+    left.stamp.emplace_back(.5,.25);
+    left.stamp.emplace_back(.5,.5);
+
+    left.stamp.emplace_back(.75,.25);
+    left.stamp.emplace_back(.75,.5);
+    left.stamp.emplace_back(.75,.75);
+    left.stamp.emplace_back(.75,1);
+
+    left.stamp.emplace_back(1,.5);
+    left.stamp.emplace_back(1,.75);
+    left.stamp.emplace_back(1,1);
+
+
+
+    CurveOption right = CurveFactory(Eigen::Vector2f(1, -1), -M_PI/2, false, 1.0);
+    right.stamp.emplace_back(0,0.25);
+    right.stamp.emplace_back(0,0);
+
+    right.stamp.emplace_back(.25,0.25);
+    right.stamp.emplace_back(.25,0);
+    right.stamp.emplace_back(.25,-.25);
+
+    right.stamp.emplace_back(.5,0);
+    right.stamp.emplace_back(.5,-.25);
+    right.stamp.emplace_back(.5,-.5);
+
+    right.stamp.emplace_back(.75,-.25);
+    right.stamp.emplace_back(.75,-.5);
+    right.stamp.emplace_back(.75,-.75);
+    right.stamp.emplace_back(.75,-1);
+
+    right.stamp.emplace_back(1,-.5);
+    right.stamp.emplace_back(1,-.75);
+    right.stamp.emplace_back(1,-1);
+
+
+
+    CurveOption back = CurveFactory(Eigen::Vector2f(-1, 0), 0, true, 0);
+    back.stamp.emplace_back(0,0);
+    back.stamp.emplace_back(-.25,0);
+    back.stamp.emplace_back(-.5,0);
+    back.stamp.emplace_back(-.75,0);
+    back.stamp.emplace_back(-1,0);
+    back.stamp.emplace_back(-0,-.25);
+    back.stamp.emplace_back(-.25,-.25);
+    back.stamp.emplace_back(-.5,-.25);
+    back.stamp.emplace_back(-.75,-.25);
+    back.stamp.emplace_back(-1,-.25);
+    back.stamp.emplace_back(-0,.25);
+    // back.stamp.emplace_back(-.25,.25);
+    // back.stamp.emplace_back(-.5,.25);
+    // back.stamp.emplace_back(-.75,.25);
+    // back.stamp.emplace_back(-1,.25);
+
+
+    CurveOption back_left = CurveFactory(Eigen::Vector2f(-1, 1), -M_PI/2, true, -1.0);
+    back_left.stamp.emplace_back(0,0);
+    back_left.stamp.emplace_back(0,-.25);
+
+    back_left.stamp.emplace_back(-.25,0);
+    back_left.stamp.emplace_back(-.25,-.25);
+
+    back_left.stamp.emplace_back(-.5,.25);
+    back_left.stamp.emplace_back(-.5,0);
+    back_left.stamp.emplace_back(-.5,-.25);
+
+    back_left.stamp.emplace_back(-.75,0);
+    back_left.stamp.emplace_back(-.75,.25);
+    back_left.stamp.emplace_back(-.75,.5);
+
+    back_left.stamp.emplace_back(-1,.25);
+    back_left.stamp.emplace_back(-1,.5);
+    back_left.stamp.emplace_back(-1,.75);
+    back_left.stamp.emplace_back(-1,1);
+
+    back_left.stamp.emplace_back(-1.25,.5);
+    back_left.stamp.emplace_back(-1.25,.75);
+    back_left.stamp.emplace_back(-1.25,1);
+
+    CurveOption back_right = CurveFactory(Eigen::Vector2f(-1, -1), M_PI/2, true, 1.0);
+    back_right.stamp.emplace_back(0,0);
+    back_right.stamp.emplace_back(0,-.25);
+
+    back_right.stamp.emplace_back(-.25,0);
+    back_right.stamp.emplace_back(-.25,-.25);
+
+    back_right.stamp.emplace_back(-.5,0);
+    back_right.stamp.emplace_back(-.5,-.25);
+    back_right.stamp.emplace_back(-.5,-.5);
+
+    back_right.stamp.emplace_back(-.75,-.25);
+    back_right.stamp.emplace_back(-.75,-.5);
+    back_right.stamp.emplace_back(-.75,-.75);
+
+    back_right.stamp.emplace_back(-1,-.5);
+    back_right.stamp.emplace_back(-1,-.75);
+    back_right.stamp.emplace_back(-1,-1);
+    back_right.stamp.emplace_back(-1,-1.25);
+
+    back_right.stamp.emplace_back(-1.25,-.75);
+    back_right.stamp.emplace_back(-1.25,-1);
+    back_right.stamp.emplace_back(-1.25,-1.25);
+
+    CurveOptions.emplace_back(forward);
+    CurveOptions.emplace_back(left);
+    CurveOptions.emplace_back(right);
+
+    CurveOptions.emplace_back(back);
+    CurveOptions.emplace_back(back_left);
+    CurveOptions.emplace_back(back_right);
+  }
+
+  struct CurveOption CurveFactory(Eigen::Vector2f translation, float heading, bool backwards, float curvature) {
+    struct CurveOption newCurve;
+    newCurve.translation = translation;
+    newCurve.heading = heading;
+    newCurve.backwards = backwards;
+    newCurve.curvature = curvature;
+    newCurve.stamp = std::vector<Eigen::Vector2f>();
+    return newCurve;
   }
 
   CImg<float> image_real;
