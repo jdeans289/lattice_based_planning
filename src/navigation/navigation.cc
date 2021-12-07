@@ -429,6 +429,96 @@ struct State Navigation::AddTransform (const struct State& cur_state, const stru
   return transformed_state;
 }
 
+void Navigation::PrecomputeObstacleChecking(struct State& location_state, 
+                                            bool visited[(int) (map_x_max - map_x_min)][(int) (map_y_max - map_y_min)])
+{
+  int pixel_x = (location_state.x - map_x_min);
+  int pixel_y = (location_state.y - map_y_min);
+
+  if (visited[pixel_x][pixel_y])
+    return;
+
+  visited[pixel_x][pixel_y] = true;
+  for (struct CurveOption neighbor : CurveOptions) 
+  {
+    bool reachable = true;
+    struct State next_state = AddTransform(location_state, neighbor);
+    float incr = map_resolution;
+
+    // x direction
+    if (fEquals(location_state.theta, 0) || fEquals(location_state.theta, M_PI) || fEquals(location_state.theta, -M_PI))
+    {
+      // Backwards
+      if (neighbor.translation[0] < 0)
+        incr = map_resolution * -1;
+
+      for (float i = 0; abs(i) <= abs(neighbor.translation[0]) && reachable; i += map_resolution)
+      {
+        int next_x = ((location_state.x + i) - map_x_min);
+        int map_x = next_x / map_resolution;
+        int map_y = pixel_y / map_resolution;
+
+        if (occupancy_grid[map_x][map_y])
+          reachable = False;
+      }
+
+      incr = map_resolution;
+      if (neighbor.translation[1] < 0)
+        incr = -incr;
+      
+      for (float i = 0; abs(i) <= abs(neighbor.translation[1]) && reachable; i += map_resolution)
+      {
+        int next_x = ((location_state.x + neighbor.translation[0]) - map_x_min);
+        int map_x = next_x / map_resolution;
+        int map_y = ((location_state.y + i) - map_y_min) / map_resolution;
+
+        if (occupancy_grid[map_x][map_y])
+          reachable = False;
+      }
+
+      if (reachable)
+      {
+        checking_grid[(int) (next_state.x - map_x_min)][(int) (next_state.y - map_y_min)] = true;
+        PrecomputeObstacleChecking(next_state, visited);
+      }
+    }
+    else
+    {
+      if (neighbor.translation[0] < 0)
+        incr = map_resolution * -1;
+
+      for (float i = 0; abs(i) <= abs(neighbor.translation[0]) && reachable; i += map_resolution)
+      {
+        int next_y = ((location_state.y + i) - map_x_min);
+        int map_x = pixel_x / map_resolution;
+        int map_y = next_y / map_resolution;
+
+        if (occupancy_grid[map_x][map_y])
+          reachable = False;
+      }
+
+      incr = map_resolution;
+      if (neighbor.translation[1] < 0)
+        incr = -incr;
+      
+      for (float i = 0; abs(i) <= abs(neighbor.translation[1]) && reachable; i += map_resolution)
+      {
+        int next_y = ((location_state.y + neighbor.translation[0]) - map_x_min);
+        int map_y = next_y / map_resolution;
+        int map_x = ((location_state.x + i) - map_x_min) / map_resolution;
+
+        if (occupancy_grid[map_x][map_y])
+          reachable = False;
+      }
+    }
+    if (reachable)
+    {
+      checking_grid[(int) (next_state.x - map_x_min)][(int) (next_state.y - map_y_min)] = true;
+      PrecomputeObstacleChecking(next_state, visited);
+    }
+  }
+}
+
 void Navigation::MakeLatticePlan() {
 
     struct State location_state = StateFactory(robot_loc_[0], robot_loc_[1], robot_angle_);

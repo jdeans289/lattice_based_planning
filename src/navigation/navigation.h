@@ -160,7 +160,7 @@ class Navigation {
 
   float* GetLatticeAction (); 
 
-
+ 
 
   static constexpr int map_x_max = 45;
   static constexpr int map_x_min = -45;
@@ -171,6 +171,7 @@ class Navigation {
   static constexpr int map_y_width = (int) (map_y_max - map_y_min) / map_resolution;
 
   bool occupancy_grid [map_x_width][map_y_width];
+  bool checking_grid[(int) (map_x_max - map_x_min)][(int) (map_y_max - map_y_min)];
 
   static constexpr float state_theta_resolution = M_PI / 2;
   static constexpr float state_xy_resolution = 1.0;
@@ -192,7 +193,8 @@ class Navigation {
     newState.theta = round(theta / state_theta_resolution) * state_theta_resolution;
     return newState;
   }
-
+  void PrecomputeObstacleChecking(struct State& location_state, 
+                                            bool visited[(int) (map_x_max - map_x_min)][(int) (map_y_max - map_y_min)]);
   CImg<float> image_real;
 
 
