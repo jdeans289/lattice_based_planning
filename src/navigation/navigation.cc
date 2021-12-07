@@ -161,6 +161,11 @@ void Navigation::BuildGraph(const string& map_file) {
       occupancy_grid[i][j] = 0;
     }
   }
+  printf("Check GRID Initialized\n");
+
+  for (int i = 0; i < (int) (map_x_max - map_x_min); i++)
+    for (int j = 0; j < (int) (map_y_max - map_y_min); j++)
+      checking_grid[i][j] = 0;
 
   // printf("map lines: %d\n", (int) map_.lines.size());
 
@@ -432,13 +437,21 @@ struct State Navigation::AddTransform (const struct State& cur_state, const stru
 void Navigation::PrecomputeObstacleChecking(struct State& location_state, 
                                             bool visited[(int) (map_x_max - map_x_min)][(int) (map_y_max - map_y_min)])
 {
+  if (it > 500)
+    return;
+
   int pixel_x = (location_state.x - map_x_min);
   int pixel_y = (location_state.y - map_y_min);
+
+  if (pixel_x < 0 || pixel_x >= (map_x_max - map_x_min) || pixel_y < 0 || pixel_y >= (map_y_max - map_y_min))
+    return;
+  printf("Precomputing...%d, %d %d %d\n", pixel_x, pixel_y, (map_x_max - map_x_min), (map_y_max - map_y_min));
 
   if (visited[pixel_x][pixel_y])
     return;
 
   visited[pixel_x][pixel_y] = true;
+  it++;
   for (struct CurveOption neighbor : CurveOptions) 
   {
     bool reachable = true;
@@ -458,7 +471,7 @@ void Navigation::PrecomputeObstacleChecking(struct State& location_state,
         int map_x = next_x / map_resolution;
         int map_y = pixel_y / map_resolution;
 
-        if (occupancy_grid[map_x][map_y])
+        if ((map_x < 0 || map_x >= (map_x_max - map_x_min) || map_y < 0 || map_y >= (map_y_max - map_y_min)) && (occupancy_grid[map_x][map_y]))
           reachable = False;
       }
 
@@ -472,7 +485,7 @@ void Navigation::PrecomputeObstacleChecking(struct State& location_state,
         int map_x = next_x / map_resolution;
         int map_y = ((location_state.y + i) - map_y_min) / map_resolution;
 
-        if (occupancy_grid[map_x][map_y])
+        if ((map_x < 0 || map_x >= (map_x_max - map_x_min) || map_y < 0 || map_y >= (map_y_max - map_y_min)) && (occupancy_grid[map_x][map_y]))
           reachable = False;
       }
 
@@ -493,7 +506,7 @@ void Navigation::PrecomputeObstacleChecking(struct State& location_state,
         int map_x = pixel_x / map_resolution;
         int map_y = next_y / map_resolution;
 
-        if (occupancy_grid[map_x][map_y])
+        if ((map_x < 0 || map_x >= (map_x_max - map_x_min) || map_y < 0 || map_y >= (map_y_max - map_y_min)) && (occupancy_grid[map_x][map_y]))
           reachable = False;
       }
 
@@ -507,7 +520,7 @@ void Navigation::PrecomputeObstacleChecking(struct State& location_state,
         int map_y = next_y / map_resolution;
         int map_x = ((location_state.x + i) - map_x_min) / map_resolution;
 
-        if (occupancy_grid[map_x][map_y])
+        if ((map_x < 0 || map_x >= (map_x_max - map_x_min) || map_y < 0 || map_y >= (map_y_max - map_y_min)) && (occupancy_grid[map_x][map_y]))
           reachable = False;
       }
     }
@@ -528,6 +541,16 @@ void Navigation::MakeLatticePlan() {
     struct State goal_state = StateFactory(GOAL[0], GOAL[1], GOAL_ANGLE);
     printf("Goal location: ");
     PrintState(goal_state);
+    
+    bool visited[(int) (map_x_max - map_x_min)][(int) (map_y_max - map_y_min)];
+    for (int i = 0; i < (int) (map_x_max - map_x_min); i++)
+      for (int j = 0; j < (int) (map_y_max - map_y_min); j++)
+        visited[i][j] = 0;
+    
+
+    printf("Starting Precomputation of Obstacle Checking\n");
+    PrecomputeObstacleChecking(location_state, visited);
+    printf("GOAL CHECK: %d\n", checking_grid[(int) (goal_state.x - map_x_min)][(int) (goal_state.y - map_y_min)]);
 
     SimpleQueue<struct State, float> frontier;
     frontier.Push(location_state, 0);

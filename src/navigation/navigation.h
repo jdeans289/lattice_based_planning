@@ -172,7 +172,7 @@ class Navigation {
 
   bool occupancy_grid [map_x_width][map_y_width];
   bool checking_grid[(int) (map_x_max - map_x_min)][(int) (map_y_max - map_y_min)];
-
+  int it = 0;
   static constexpr float state_theta_resolution = M_PI / 2;
   static constexpr float state_xy_resolution = 1.0;
 
