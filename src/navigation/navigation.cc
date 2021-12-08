@@ -466,7 +466,7 @@ void Navigation::MakeLatticePlan() {
         if (cost.find(next_state) == cost.end() || new_cost < cost[next_state]) {
           // Update the cost
           cost[next_state] = new_cost;
-          frontier.Push(next_state, -(new_cost + LatticeHeuristic(next_state, goal_state)));
+          frontier.Push(next_state, -(new_cost + HeadingHeuristic(next_state, goal_state)));
           struct PathNode curr_path;
           curr_path.state = current_loc;
           curr_path.curve = neighbor;
@@ -747,6 +747,16 @@ float Navigation::LatticeHeuristic(const struct State& current, const struct Sta
   Vector2f goal_loc (goal.x, goal.y);
 
   return (cur_loc - goal_loc).norm();
+}
+
+
+float Navigation::HeadingHeuristic(const struct State& current, const struct State& goal)
+{
+  Vector2f cur_loc (current.x, current.y);
+  Vector2f goal_loc (goal.x, goal.y);
+
+  float distance_to_goal = (cur_loc - goal_loc).norm();
+  return distance_to_goal + abs(current.theta - goal.theta) * heading_scale;
 }
 
 void Navigation::UpdateLocation(const Eigen::Vector2f& loc, float angle) {

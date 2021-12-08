@@ -728,6 +728,8 @@ class Navigation {
   void MakeLatticePlan();
   float heuristic(Eigen::Vector2f current, Eigen::Vector2f goal);
   float LatticeHeuristic(const struct State& current, const struct State& goal);
+
+  float HeadingHeuristic(const struct State& current, const struct State& goal);
   void SetGoal();
 
   float radius = 3.0;
@@ -739,7 +741,7 @@ class Navigation {
   float GOAL_WEIGHT = 10;
 
   bool VISUALIZE = 1;
-  
+  float heading_scale = 10.0;
   int iteration = 0;
   int scratch = 0;
 
