@@ -98,8 +98,8 @@ Navigation::Navigation(const string& map_file, ros::NodeHandle* n) :
   neighbors.emplace_back(-1,0);
   neighbors.emplace_back(-1,-1);
 
-  MakeSimpleLattice();
-  // MakeComplexLattice();
+  // MakeSimpleLattice();
+  MakeComplexLattice();
 
 
   BuildGraph(map_file);
@@ -507,7 +507,7 @@ void Navigation::MakeLatticePlan() {
       PrintState(path_states[i].state);
     }
 
-    VisualizeLatticePath();
+    VisualizeLatticePath2();
 
 
     // path.clear();
@@ -578,47 +578,99 @@ void Navigation::VisualizeLatticePath2() {
     Vector2f p0(s1.x, s1.y);
     Vector2f p1(s2.x, s2.y);
 
-    if (fEquals(path_states[i].curve.heading, 0) || fEquals(abs(s2.theta - s1.theta), M_PI/4)) {
-      // Straight line or 45 deg turn
-      visualization::DrawLine(p0, p1, 0xFF0000, global_viz_msg_);
-    } else {
-      // 90 deg turn
-      Eigen::Vector2f center;
-      float start_angle = 0;
-      float end_angle = 0;
-      float radius = 1.0;
-      if (fEquals(s1.theta, 0) || fEquals(s1.theta, M_PI) || fEquals(s1.theta, -M_PI)) {
-        // Going x direction
-        center[0] = s1.x;
-        center[1] = s2.y;
-      } else {
-        center[0] = s2.x;
-        center[1] = s1.y;
-      }
-      if (fEquals(path_states[i].curve.heading, M_PI / 2)) {
-        if (!path_states[i].curve.backwards) {
-          // Turning left
-          start_angle = -M_PI / 2 + s1.theta;
-          end_angle = 0 + s1.theta;
-        } else {
-          // Back right
-          start_angle = M_PI / 2 + s1.theta;
-          end_angle = M_PI + s1.theta;
-        }
-      }
-      if (fEquals(path_states[i].curve.heading, -M_PI / 2)) {
-        if (!path_states[i].curve.backwards) {
-          // Turning right
-          start_angle = 0 + s1.theta;
-          end_angle = M_PI / 2 + s1.theta;
-        } else {
-          // Back left
-          start_angle = M_PI + s1.theta;
-          end_angle = (3*M_PI) / 2 + s1.theta;
-        }
-      }
 
-      visualization::DrawArc(center, radius, start_angle, end_angle, 0xFF0000, global_viz_msg_);
+    if(fEquals(path_states[i].curve.heading, 0)) {
+      // Straight line
+      visualization::DrawLine(p0, p1, 0xFF0000, global_viz_msg_);
+      // printf("Drawing normal straight line for state %d\n", i);
+
+    } else if (fEquals(abs(s2.theta - s1.theta), M_PI/4)) {
+      // 45 deg turn
+      // printf("Drawing dotted line for state %d\n", i);
+      Vector2f connect = p1 - p0;
+      float length = connect.norm();
+      float increment = 0;
+      while (increment < length) {
+        if (fEquals(path_states[i].curve.heading, M_PI / 4)) {
+          // Turning left 45
+          Vector2f offset;
+          Matrix2f rot;
+          if (!path_states[i].curve.diagonal) {
+            rot = GetRotationMatrix(path_states[i].state.theta + (M_PI /2));
+            offset = Eigen::Vector2f(increment/length, -sqrt(increment/length));
+          } else {
+            rot = GetRotationMatrix(path_states[i].state.theta + (M_PI /2) - (M_PI / 4));
+            offset = Eigen::Vector2f(increment/length, pow(increment/length - 1,2) - 1);
+          }
+          Vector2f point_to_draw = p0 + rot * offset;
+
+          visualization::DrawPoint(point_to_draw, 0xFF0000, global_viz_msg_);
+          increment += 0.001;
+        } else if (fEquals(path_states[i].curve.heading, -M_PI / 4)) {
+          // Turning right 45
+          Vector2f offset;
+          Matrix2f rot;
+          if (!path_states[i].curve.diagonal) {
+            rot = GetRotationMatrix(path_states[i].state.theta + (3 * M_PI /2));
+            offset = Eigen::Vector2f(increment/length, sqrt(increment/length));
+          } else {
+            rot = GetRotationMatrix(path_states[i].state.theta + (3 * M_PI /2) + (M_PI / 4));
+            offset = Eigen::Vector2f(increment/length, -pow(increment/length - 1,2) + 1);
+          }
+          Vector2f point_to_draw = p0 + rot * offset;
+
+          visualization::DrawPoint(point_to_draw, 0xFF0000, global_viz_msg_);
+          increment += 0.001;
+        }
+        //   // handle the on diag cases
+        //   Vector2f offset (increment/length, -sqrt(1 - increment/length));
+        //   Matrix2f rot = GetRotationMatrix(path_states[i].state.theta + (3 * M_PI / 4));
+        //   Vector2f point_to_draw = p0 + rot * offset;
+
+        //   visualization::DrawPoint(point_to_draw, 0xFF0000, global_viz_msg_);
+        //   increment += 0.01;
+        // }
+      }
+    }
+    else {
+        // printf("Drawing curve for state %d\n", i);
+        // 90 deg turn
+        Eigen::Vector2f center;
+        float start_angle = 0;
+        float end_angle = 0;
+        float radius = 1.0;
+        if (fEquals(s1.theta, 0) || fEquals(s1.theta, M_PI) || fEquals(s1.theta, -M_PI)) {
+          // Going x direction
+          center[0] = s1.x;
+          center[1] = s2.y;
+        } else {
+          center[0] = s2.x;
+          center[1] = s1.y;
+        }
+        if (fEquals(path_states[i].curve.heading, M_PI / 2)) {
+          if (!path_states[i].curve.backwards) {
+            // Turning left
+            start_angle = -M_PI / 2 + s1.theta;
+            end_angle = 0 + s1.theta;
+          } else {
+            // Back right
+            start_angle = M_PI / 2 + s1.theta;
+            end_angle = M_PI + s1.theta;
+          }
+        }
+        if (fEquals(path_states[i].curve.heading, -M_PI / 2)) {
+          if (!path_states[i].curve.backwards) {
+            // Turning right
+            start_angle = 0 + s1.theta;
+            end_angle = M_PI / 2 + s1.theta;
+          } else {
+            // Back left
+            start_angle = M_PI + s1.theta;
+            end_angle = (3*M_PI) / 2 + s1.theta;
+          }
+        }
+
+        visualization::DrawArc(center, radius, start_angle, end_angle, 0xFF0000, global_viz_msg_);
 
     }
   }

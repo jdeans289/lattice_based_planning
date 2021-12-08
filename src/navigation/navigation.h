@@ -182,7 +182,7 @@ class Navigation {
 
   bool occupancy_grid [map_x_width][map_y_width];
 
-  static constexpr float state_theta_resolution = M_PI / 2;
+  static constexpr float state_theta_resolution = M_PI / 4;
   static constexpr float state_xy_resolution = 1.0;
 
 
@@ -612,7 +612,7 @@ class Navigation {
     CurveOption left_d = CurveFactory(Eigen::Vector2f(sqrt(2), 0), -M_PI/4, false, 0);
     left_d.diagonal = true;
     left_d.stamp = forward_d.stamp;
-    left_d.cost = 0.1;
+    left_d.cost += 0.1;
 
     CurveOptions.emplace_back(forward);
     CurveOptions.emplace_back(left);
