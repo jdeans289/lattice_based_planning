@@ -98,8 +98,8 @@ Navigation::Navigation(const string& map_file, ros::NodeHandle* n) :
   neighbors.emplace_back(-1,0);
   neighbors.emplace_back(-1,-1);
 
-  MakeSimpleLattice();
-  // MakeComplexLattice();
+  // MakeSimpleLattice();
+  MakeComplexLattice();
 
 
   BuildGraph(map_file);
@@ -442,15 +442,15 @@ void Navigation::MakeLatticePlan() {
 
       // Check each of the possible curves in the lattice
       for (struct CurveOption neighbor : CurveOptions) {
-        // if (fEquals(fmod(current_loc.theta, M_PI / 2.0), 0.0)) {
-        //   // If we are currently diagonal
-        //   if (neighbor.diagonal)
-        //     continue;
-        // } else {
-        //   // If we are currently right angle
-        //   if (!neighbor.diagonal)
-        //     continue;
-        // }
+        if (fEquals(fmod(current_loc.theta, M_PI / 2.0), 0.0)) {
+          // If we are currently diagonal
+          if (neighbor.diagonal)
+            continue;
+        } else {
+          // If we are currently right angle
+          if (!neighbor.diagonal)
+            continue;
+        }
         
 
         struct State next_state = AddTransform(current_loc, neighbor);
