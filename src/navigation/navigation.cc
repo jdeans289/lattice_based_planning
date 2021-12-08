@@ -99,53 +99,8 @@ Navigation::Navigation(const string& map_file, ros::NodeHandle* n) :
   neighbors.emplace_back(-1,-1);
 
   MakeSimpleLattice();
+  // MakeComplexLattice();
 
-  // CurveOption forward;
-  // forward.translation = Eigen::Vector2f(1, 0);
-  // forward.heading = 0;
-  // forward.backwards = false;
-  // forward.curvature = 0;
-
-  // CurveOption left;
-  // left.translation = Eigen::Vector2f(1, 1);
-  // left.heading = M_PI / 2;
-  // left.backwards = false;
-  // left.curvature = -1.0;
-
-  // CurveOption right;
-  // right.translation = Eigen::Vector2f(1, -1);
-  // right.heading = -(M_PI / 2);
-  // right.backwards = false;
-  // left.curvature = 1.0;
-
-  // CurveOption back;
-  // back.translation = Eigen::Vector2f(-1, 0);
-  // back.heading = 0;
-  // back.backwards = true;
-  // back.curvature = 0;
-
-  // CurveOption back_left;
-  // back_left.translation = Eigen::Vector2f(-1, 1);
-  // back_left.heading = -(M_PI / 2);
-  // back_left.backwards = true;
-  // back_left.curvature = -1.0;
-
-  // CurveOption back_right;
-  // back_right.translation = Eigen::Vector2f(-1, -1);
-  // back_right.heading = (M_PI / 2);
-  // back_right.backwards = true;
-  // back_right.curvature = 1.0;
-
-  // CurveOptions.emplace_back(forward);
-  // CurveOptions.emplace_back(left);
-  // CurveOptions.emplace_back(right);
-
-  // CurveOptions.emplace_back(back);
-  // CurveOptions.emplace_back(back_left);
-  // CurveOptions.emplace_back(back_right);
-
-
-  // }
 
   BuildGraph(map_file);
 
@@ -379,32 +334,34 @@ bool Navigation::CheckPointForCollision(const Eigen::Vector2f& point) {
 bool Navigation::CheckCurveForCollision (const struct State& cur_state, const struct State& end_state, const struct CurveOption& option) {
 
   // Stamp for straight
-  Vector2f p0 (cur_state.x, cur_state.y);
-  Matrix2f rot = GetRotationMatrix(cur_state.theta);
-  for (const Vector2f& cell : option.stamp) {
-    Vector2f place = rot * cell;
-    if (CheckPointForCollision(p0 + place))
-      return true;
+  if (option.stamp.size() > 0) {
+    Vector2f p0 (cur_state.x, cur_state.y);
+    Matrix2f rot = GetRotationMatrix(cur_state.theta);
+    for (const Vector2f& cell : option.stamp) {
+      Vector2f place = rot * cell;
+      if (CheckPointForCollision(p0 + place))
+        return true;
+    }
+    return false;
   }
-  return false;
   
 
-  // Vector2f p0 (cur_state.x, cur_state.y);
-  // Vector2f p1 (end_state.x, end_state.y);
+  Vector2f p0 (cur_state.x, cur_state.y);
+  Vector2f p1 (end_state.x, end_state.y);
 
-  // Vector2f connect = p1 - p0;
-  // float length = connect.norm();
-  // float increment = 0;
-  // while (increment < length) {
-  //   Vector2f point_to_check = p0 + (increment/length) * connect;
+  Vector2f connect = p1 - p0;
+  float length = connect.norm();
+  float increment = 0;
+  while (increment < length) {
+    Vector2f point_to_check = p0 + (increment/length) * connect;
 
-  //   if (CheckPointForCollision(point_to_check))
-  //     return true;
+    if (CheckPointForCollision(point_to_check))
+      return true;
 
-  //   increment += 0.25;
-  // }
+    increment += 0.1;
+  }
 
-  // return false;
+  return false;
 }
 
 void PrintState(const struct State& state) {
@@ -418,7 +375,7 @@ bool Navigation::CheckGoalCondition(const struct State& cur_state, const struct 
   Vector2f curr_pos(cur_state.x, cur_state.y);
   Vector2f goal_pos(goal_state.x, goal_state.y);
 
-  if ((curr_pos - goal_pos).norm() < 0.5 && abs(cur_state.theta - goal_state.theta) < M_PI / 4) {
+  if ((curr_pos - goal_pos).norm() < 0.5 && abs(cur_state.theta - goal_state.theta) < M_PI / 6) {
     return true;
   }
   return false;
@@ -426,7 +383,7 @@ bool Navigation::CheckGoalCondition(const struct State& cur_state, const struct 
 } 
 
 struct State Navigation::AddTransform (const struct State& cur_state, const struct CurveOption& option) {
-  struct State transformed_state;
+  // struct State transformed_state;
 
   Eigen::Vector2f new_pos(cur_state.x, cur_state.y);
 
@@ -434,11 +391,12 @@ struct State Navigation::AddTransform (const struct State& cur_state, const stru
 
   new_pos += rot * option.translation; 
 
-  transformed_state.x = new_pos[0];
-  transformed_state.y = new_pos[1];
-  transformed_state.theta = cur_state.theta + option.heading;
+  // transformed_state.x = new_pos[0];
+  // transformed_state.y = new_pos[1];
+  // transformed_state.theta = cur_state.theta + option.heading;
 
-  return transformed_state;
+
+  return StateFactory(new_pos[0], new_pos[1], cur_state.theta + option.heading);
 }
 
 void Navigation::MakeLatticePlan() {
@@ -470,10 +428,10 @@ void Navigation::MakeLatticePlan() {
 
     // Begin A* search
     while (!frontier.Empty()) {
-      if (it > 5000) {
-        printf("Planning failed\n");
-        break;
-      }
+      // if (it > 5000) {
+      //   printf("Planning failed\n");
+      //   break;
+      // }
 
       struct State current_loc = frontier.Pop();
       if (CheckGoalCondition(current_loc, goal_state)) {
@@ -484,6 +442,16 @@ void Navigation::MakeLatticePlan() {
 
       // Check each of the possible curves in the lattice
       for (struct CurveOption neighbor : CurveOptions) {
+        // if (fEquals(fmod(current_loc.theta, M_PI / 2.0), 0.0)) {
+        //   // If we are currently diagonal
+        //   if (neighbor.diagonal)
+        //     continue;
+        // } else {
+        //   // If we are currently right angle
+        //   if (!neighbor.diagonal)
+        //     continue;
+        // }
+        
 
         struct State next_state = AddTransform(current_loc, neighbor);
         
@@ -492,7 +460,7 @@ void Navigation::MakeLatticePlan() {
           continue;
 
         // Edge cost is the length of the curve
-        float new_cost = cost[current_loc] + neighbor.translation.norm();
+        float new_cost = cost[current_loc] + neighbor.cost;
 
         // If the node has never been explored before, or if the cost is less than a previously found cost:
         if (cost.find(next_state) == cost.end() || new_cost < cost[next_state]) {
@@ -606,94 +574,95 @@ void Navigation::VisualizeLatticePath() {
     Vector2f point (s1.x, s1.y);
 
     for (const Vector2f& cell : path_states[i].curve.stamp) {
-      Vector2f place = point + (rot * cell);
+      Vector2f place = point + (rot * (cell + Vector2f(0.125,0.125)));
       visualization::DrawCross(place, 0.125, 0x00FF00,global_viz_msg_);
     }
 
     Vector2f p0(s1.x, s1.y);
     Vector2f p1(s2.x, s2.y);
 
-    if (s1.theta == s2.theta) {
+    if (s1.theta == s2.theta || fEquals(abs(s2.theta - s1.theta), M_PI/4)) {
       visualization::DrawLine(p0, p1, 0xFF0000, global_viz_msg_);
     } else {
-      Eigen::Vector2f center;
-      float start_angle = 0;
-      float end_angle = 0;
-      if (fEquals(s1.theta, 0) || fEquals(s1.theta, M_PI) || fEquals(s1.theta, -M_PI)) {
-        // Going x direction
-        center[0] = s1.x;
-        center[1] = s2.y;
-         
-         // Turning left
-         if( fEquals(s2.theta - s1.theta, M_PI/2)) {
 
-          // If moving in positive x direction
-          if (s2.x > s1.x)
-          {
-            start_angle = -M_PI / 2;
-            end_angle = 0;
-          }
-
-          else
-          {
-            start_angle = M_PI/2;
-            end_angle = M_PI;
-          }
-
-        }
-        // Turning right 
-        else {
-          if (s2.x > s1.x)
-          {
-            start_angle = 0;
-            end_angle = M_PI / 2;
-          }
+        Eigen::Vector2f center;
+        float start_angle = 0;
+        float end_angle = 0;
+        if (fEquals(s1.theta, 0) || fEquals(s1.theta, M_PI) || fEquals(s1.theta, -M_PI)) {
+          // Going x direction
+          center[0] = s1.x;
+          center[1] = s2.y;
           
-          // When moving in negative x direction
-          else{
-            start_angle = M_PI;
-            end_angle = -M_PI/2;
+          // Turning left
+          if( fEquals(s2.theta - s1.theta, M_PI/2)) {
+
+            // If moving in positive x direction
+            if (s2.x > s1.x)
+            {
+              start_angle = -M_PI / 2;
+              end_angle = 0;
+            }
+
+            else
+            {
+              start_angle = M_PI/2;
+              end_angle = M_PI;
+            }
+
           }
-        }
-
-      } else {
-        // Going y direction
-        center[0] = s2.x;
-        center[1] = s1.y;
-
-
-        if( fEquals(s2.theta - s1.theta, M_PI/2)) {
-        // Turning left
-
-          if (s2.y > s1.y)
-          {
-            start_angle = 0;
-            end_angle = M_PI / 2;
+          // Turning right 
+          else {
+            if (s2.x > s1.x)
+            {
+              start_angle = 0;
+              end_angle = M_PI / 2;
+            }
+            
+            // When moving in negative x direction
+            else{
+              start_angle = M_PI;
+              end_angle = -M_PI/2;
+            }
           }
-
-          else{
-            start_angle = M_PI;
-            end_angle = -M_PI/2;
-          }
-          
 
         } else {
-          // Turning right
+          // Going y direction
+          center[0] = s2.x;
+          center[1] = s1.y;
 
-          if (s2.y > s1.y)
-          {
-            start_angle = M_PI/2;
-            end_angle = M_PI;
+
+            // Right angle
+
+          if( fEquals(s2.theta - s1.theta, M_PI/2)) {
+          // Turning left
+
+            if (s2.y > s1.y)
+            {
+              start_angle = 0;
+              end_angle = M_PI / 2;
+            }
+
+            else{
+              start_angle = M_PI;
+              end_angle = -M_PI/2;
+            }
+            
+
+          } else {
+            // Turning right
+
+            if (s2.y > s1.y)
+            {
+              start_angle = M_PI/2;
+              end_angle = M_PI;
+            }
+
+            else{
+              start_angle = -M_PI/2;
+              end_angle = 0;
+            }
           }
-
-          else{
-            start_angle = -M_PI/2;
-            end_angle = 0;
-          }
-        }
-
       }
-
       float radius = 1.0;
       visualization::DrawArc(center, radius, start_angle, end_angle, 0xFF0000, global_viz_msg_);
     }
