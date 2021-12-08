@@ -98,8 +98,8 @@ Navigation::Navigation(const string& map_file, ros::NodeHandle* n) :
   neighbors.emplace_back(-1,0);
   neighbors.emplace_back(-1,-1);
 
-  // MakeSimpleLattice();
-  MakeComplexLattice();
+  MakeSimpleLattice();
+  // MakeComplexLattice();
 
 
   BuildGraph(map_file);
@@ -557,6 +557,73 @@ void Navigation::MakeLatticePlan() {
     // DrawPlan();
 } 
 
+void Navigation::VisualizeLatticePath2() {
+  if (path_states.size() == 0)
+    return;
+
+  // Vector2f cumulative_transform(0,0);
+  // float cumulative_heading = 0;
+  for (unsigned i = 0; i < path_states.size()-1; i++) {
+    State s1 = path_states[i].state;
+    State s2 = path_states[i+1].state;
+
+    Matrix2f rot = GetRotationMatrix(path_states[i].state.theta);
+    Vector2f point (s1.x, s1.y);
+
+    for (const Vector2f& cell : path_states[i].curve.stamp) {
+      Vector2f place = point + (rot * (cell + Vector2f(0.125,0.125)));
+      visualization::DrawCross(place, 0.125, 0x00FF00,global_viz_msg_);
+    }
+
+    Vector2f p0(s1.x, s1.y);
+    Vector2f p1(s2.x, s2.y);
+
+    if (fEquals(path_states[i].curve.heading, 0) || fEquals(abs(s2.theta - s1.theta), M_PI/4)) {
+      // Straight line or 45 deg turn
+      visualization::DrawLine(p0, p1, 0xFF0000, global_viz_msg_);
+    } else {
+      // 90 deg turn
+      Eigen::Vector2f center;
+      float start_angle = 0;
+      float end_angle = 0;
+      float radius = 1.0;
+      if (fEquals(s1.theta, 0) || fEquals(s1.theta, M_PI) || fEquals(s1.theta, -M_PI)) {
+        // Going x direction
+        center[0] = s1.x;
+        center[1] = s2.y;
+      } else {
+        center[0] = s2.x;
+        center[1] = s1.y;
+      }
+      if (fEquals(path_states[i].curve.heading, M_PI / 2)) {
+        if (!path_states[i].curve.backwards) {
+          // Turning left
+          start_angle = -M_PI / 2 + s1.theta;
+          end_angle = 0 + s1.theta;
+        } else {
+          // Back right
+          start_angle = M_PI / 2 + s1.theta;
+          end_angle = M_PI + s1.theta;
+        }
+      }
+      if (fEquals(path_states[i].curve.heading, -M_PI / 2)) {
+        if (!path_states[i].curve.backwards) {
+          // Turning right
+          start_angle = 0 + s1.theta;
+          end_angle = M_PI / 2 + s1.theta;
+        } else {
+          // Back left
+          start_angle = M_PI + s1.theta;
+          end_angle = (3*M_PI) / 2 + s1.theta;
+        }
+      }
+
+      visualization::DrawArc(center, radius, start_angle, end_angle, 0xFF0000, global_viz_msg_);
+
+    }
+  }
+}
+
 void Navigation::VisualizeLatticePath() {
   
   // visualization::DrawLine(line.p0, line.p1,0xFF0000,global_viz_msg_);
@@ -576,6 +643,7 @@ void Navigation::VisualizeLatticePath() {
     for (const Vector2f& cell : path_states[i].curve.stamp) {
       Vector2f place = point + (rot * (cell + Vector2f(0.125,0.125)));
       visualization::DrawCross(place, 0.125, 0x00FF00,global_viz_msg_);
+
     }
 
     Vector2f p0(s1.x, s1.y);
@@ -891,7 +959,7 @@ float* Navigation::Simple1DTOC()
     DrawCar();
     DrawArcs(curvature, dist);
     // DrawPlan();
-    VisualizeLatticePath();
+    VisualizeLatticePath2();
   }
   float zero = 0.0;
   // Distance needed to deccelerate
@@ -1032,7 +1100,7 @@ void Navigation::Run() {
     drive_msg_.curvature = 0;
     drive_msg_.velocity = 0;
 
-    VisualizeLatticePath();
+    VisualizeLatticePath2();
     DrawCar();
 
   // for (auto point : point_cloud_) {

@@ -182,7 +182,7 @@ class Navigation {
 
   bool occupancy_grid [map_x_width][map_y_width];
 
-  static constexpr float state_theta_resolution = M_PI / 4;
+  static constexpr float state_theta_resolution = M_PI / 2;
   static constexpr float state_xy_resolution = 1.0;
 
 
@@ -349,9 +349,9 @@ class Navigation {
     CurveOptions.emplace_back(back_right);
   }
 
-    void MakeComplexLattice() {
+  void MakeComplexLattice() {
     CurveOptions.clear();
-    MakeSimpleLattice();
+    // MakeSimpleLattice();
     CurveOption forward = CurveFactory(Eigen::Vector2f(1, 0), 0, false, 0);
     forward.stamp.emplace_back(0,0);
     forward.stamp.emplace_back(0,-.25);
@@ -668,6 +668,7 @@ class Navigation {
   Eigen::Matrix2f GetRotationMatrix (const float angle);
 
   void VisualizeLatticePath();
+  void VisualizeLatticePath2();
 
 
   void DrawCar();
