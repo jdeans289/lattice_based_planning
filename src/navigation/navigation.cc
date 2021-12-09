@@ -33,6 +33,7 @@
 #include "navigation.h"
 #include "visualization/visualization.h"
 #include "visualization/CImg.h"
+#include <chrono>
 
 using Eigen::Vector2f;
 using Eigen::Matrix2f;
@@ -425,7 +426,7 @@ void Navigation::MakeLatticePlan() {
     int failed = 1; 
     printf("Starting lattice based exploration\n");
     int it = 0;
-
+    auto begin = std::chrono::high_resolution_clock::now();
     // Begin A* search
     while (!frontier.Empty()) {
       // if (it > 5000) {
@@ -481,7 +482,7 @@ void Navigation::MakeLatticePlan() {
       printf("Plan failed\n");
       return;
     }
-
+    auto end = std::chrono::high_resolution_clock::now();
 
     // const unsigned char color3[] = { 0,0,255 };
     struct PathNode goal_node;
@@ -500,7 +501,6 @@ void Navigation::MakeLatticePlan() {
     }
 
     printf("States in path: %lu\n", path_states.size());
-
     std::reverse(path_states.begin(), path_states.end());
     for (unsigned i = 0; i < path_states.size(); i++) {
       printf("State %d: ", i);
@@ -508,7 +508,10 @@ void Navigation::MakeLatticePlan() {
     }
 
     VisualizeLatticePath2();
-
+    printf("Runtime of Search: %lu\n", std::chrono::duration_cast<std::chrono::milliseconds>(begin - end).count());
+    printf("Number of States: %lu\n", path_states.size());
+    printf("Number of Iterations: %d", it);
+    printf("Cost of Path: %f", cost[goal_state]);
 
     // path.clear();
 
