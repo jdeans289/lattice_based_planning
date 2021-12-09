@@ -466,7 +466,7 @@ void Navigation::MakeLatticePlan() {
         if (cost.find(next_state) == cost.end() || new_cost < cost[next_state]) {
           // Update the cost
           cost[next_state] = new_cost;
-          frontier.Push(next_state, -(new_cost + HeadingHeuristic(next_state, goal_state)));
+          frontier.Push(next_state, -(new_cost + LatticeHeuristic(next_state, goal_state)));
           struct PathNode curr_path;
           curr_path.state = current_loc;
           curr_path.curve = neighbor;

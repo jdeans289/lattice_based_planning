@@ -486,25 +486,28 @@ class Navigation {
 
     CurveOption right_45 = CurveFactory(Eigen::Vector2f(1, -1), -M_PI/4, false, 1.0);
     right_45.cost = M_PI / 2;
-    right_45.stamp.emplace_back(0,0.25);
+    right_45.stamp.emplace_back(0,-.25);
     right_45.stamp.emplace_back(0,0);
 
-    right_45.stamp.emplace_back(.25,0.25);
+    right_45.stamp.emplace_back(.25,-0.5);
     right_45.stamp.emplace_back(.25,0);
     right_45.stamp.emplace_back(.25,-.25);
 
-    right_45.stamp.emplace_back(.5,0);
+    right_45.stamp.emplace_back(.5,-.75);
     right_45.stamp.emplace_back(.5,-.25);
     right_45.stamp.emplace_back(.5,-.5);
+    right_45.stamp.emplace_back(.5,-1);
 
-    right_45.stamp.emplace_back(.75,-.25);
+    right_45.stamp.emplace_back(.75,-1.25);
     right_45.stamp.emplace_back(.75,-.5);
     right_45.stamp.emplace_back(.75,-.75);
     right_45.stamp.emplace_back(.75,-1);
 
-    right_45.stamp.emplace_back(1,-.5);
+    // right_45.stamp.emplace_back(1,-.5);
     right_45.stamp.emplace_back(1,-.75);
     right_45.stamp.emplace_back(1,-1);
+    right_45.stamp.emplace_back(1,-1.25);
+
 
 
     CurveOption left_45 = CurveFactory(Eigen::Vector2f(1, 1), M_PI/4, false, -1.0);
@@ -514,10 +517,11 @@ class Navigation {
 
     left_45.stamp.emplace_back(0,-.25);
     left_45.stamp.emplace_back(0,0);
+    left_45.stamp.emplace_back(0,.25);
 
     left_45.stamp.emplace_back(.25,-.25);
     left_45.stamp.emplace_back(.25,0);
-    left_45.stamp.emplace_back(.25,-.25);
+    left_45.stamp.emplace_back(.25,.25);
 
     left_45.stamp.emplace_back(.5,0);
     left_45.stamp.emplace_back(.5,.25);
@@ -526,7 +530,7 @@ class Navigation {
     left_45.stamp.emplace_back(.75,.25);
     left_45.stamp.emplace_back(.75,.5);
     left_45.stamp.emplace_back(.75,.75);
-    left_45.stamp.emplace_back(.75,1);
+    // left_45.stamp.emplace_back(.75,1);
 
     left_45.stamp.emplace_back(1,.5);
     left_45.stamp.emplace_back(1,.75);
@@ -540,6 +544,8 @@ class Navigation {
 
     back_left_45.stamp.emplace_back(-.25,0);
     back_left_45.stamp.emplace_back(-.25,-.25);
+    back_left_45.stamp.emplace_back(-.25,.25);
+
 
     back_left_45.stamp.emplace_back(-.5,.25);
     back_left_45.stamp.emplace_back(-.5,0);
@@ -601,17 +607,28 @@ class Navigation {
 
     forward_d.stamp.emplace_back(1,0);
     forward_d.stamp.emplace_back(1,-.25);
+
     forward_d.stamp.emplace_back(1.25,0);
     forward_d.stamp.emplace_back(1.25,-.25);
 
     CurveOption right_d = CurveFactory(Eigen::Vector2f(sqrt(2), 0), M_PI/4, false, 0);
     right_d.diagonal = true;
     right_d.stamp = forward_d.stamp;
+    right_d.stamp.emplace_back(1, -.5);
+    right_d.stamp.emplace_back(.75, -.5);
+    right_d.stamp.emplace_back(.5, -.5);
+    right_d.stamp.emplace_back(.25, -.5);
+
+
     right_d.cost += 0.1;
 
     CurveOption left_d = CurveFactory(Eigen::Vector2f(sqrt(2), 0), -M_PI/4, false, 0);
     left_d.diagonal = true;
     left_d.stamp = forward_d.stamp;
+    left_d.stamp.emplace_back(1, 0.25);
+    left_d.stamp.emplace_back(.75, 0.25);
+    left_d.stamp.emplace_back(.5, 0.25);
+
     left_d.cost += 0.1;
 
     CurveOptions.emplace_back(forward);
