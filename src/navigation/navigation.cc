@@ -34,7 +34,13 @@
 #include "visualization/visualization.h"
 #include "visualization/CImg.h"
 #include <chrono>
+#include <sys/time.h>
+#include <ctime>
 
+using std::chrono::duration_cast;
+using std::chrono::milliseconds;
+using std::chrono::seconds;
+using std::chrono::system_clock;
 using Eigen::Vector2f;
 using Eigen::Matrix2f;
 using amrl_msgs::AckermannCurvatureDriveMsg;
@@ -99,9 +105,8 @@ Navigation::Navigation(const string& map_file, ros::NodeHandle* n) :
   neighbors.emplace_back(-1,0);
   neighbors.emplace_back(-1,-1);
 
-  // MakeSimpleLattice();
-  MakeComplexLattice();
-
+  MakeSimpleLattice();
+  // MakeComplexLattice();
 
   BuildGraph(map_file);
 
@@ -426,7 +431,7 @@ void Navigation::MakeLatticePlan() {
     int failed = 1; 
     printf("Starting lattice based exploration\n");
     int it = 0;
-    auto begin = std::chrono::high_resolution_clock::now();
+    auto time = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
     // Begin A* search
     while (!frontier.Empty()) {
       // if (it > 5000) {
@@ -461,7 +466,8 @@ void Navigation::MakeLatticePlan() {
           continue;
 
         // Edge cost is the length of the curve
-        float new_cost = cost[current_loc] + neighbor.cost;
+        // float new_cost = cost[current_loc] + neighbor.cost;
+        float new_cost = cost[current_loc] + neighbor.stamp.size();
 
         // If the node has never been explored before, or if the cost is less than a previously found cost:
         if (cost.find(next_state) == cost.end() || new_cost < cost[next_state]) {
@@ -482,7 +488,7 @@ void Navigation::MakeLatticePlan() {
       printf("Plan failed\n");
       return;
     }
-    auto end = std::chrono::high_resolution_clock::now();
+    auto end = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
 
     // const unsigned char color3[] = { 0,0,255 };
     struct PathNode goal_node;
@@ -508,10 +514,10 @@ void Navigation::MakeLatticePlan() {
     }
 
     VisualizeLatticePath2();
-    printf("Runtime of Search: %lu\n", std::chrono::duration_cast<std::chrono::milliseconds>(begin - end).count());
+    printf("Runtime of Search: %ld\n",  end - time);
     printf("Number of States: %lu\n", path_states.size());
-    printf("Number of Iterations: %d", it);
-    printf("Cost of Path: %f", cost[goal_state]);
+    printf("Number of Iterations: %d\n", it);
+    printf("Cost of Path: %f\n", cost[goal_state]);
 
     // path.clear();
 
